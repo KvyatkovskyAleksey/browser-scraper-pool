@@ -1,17 +1,19 @@
-"""Browser pool management."""
+"""Context pool management."""
 
-from browser_scraper_pool.pool.browser_pool import (
-    BrowserInstance,
-    BrowserInUseError,
-    BrowserPool,
-    NoBrowserAvailableError,
+from browser_scraper_pool.pool.context_pool import (
+    ContextInstance,
+    ContextInUseError,
+    ContextNotAvailableError,
+    ContextNotFoundError,
+    ContextPool,
     PoolNotStartedError,
 )
 
 __all__ = [
-    "BrowserInUseError",
-    "BrowserInstance",
-    "BrowserPool",
-    "NoBrowserAvailableError",
+    "ContextInUseError",
+    "ContextInstance",
+    "ContextNotAvailableError",
+    "ContextNotFoundError",
+    "ContextPool",
     "PoolNotStartedError",
 ]

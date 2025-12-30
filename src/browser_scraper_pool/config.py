@@ -13,17 +13,17 @@ class Settings(BaseSettings):
     # RabbitMQ
     rabbitmq_url: str = "amqp://guest:guest@localhost/"
 
-    # Browser Pool
-    browser_pool_size: int = 3
+    # Browser
     browser_headless: bool = False
     use_virtual_display: bool = True
     virtual_display_size: tuple[int, int] = (1920, 1080)
-
-    # Logging
-    log_level: str = "INFO"
+    cdp_port: int = 9222
 
     # Persistent contexts storage
     persistent_contexts_path: str = "./data/contexts"
+
+    # Logging
+    log_level: str = "INFO"
 
 
 settings = Settings()
