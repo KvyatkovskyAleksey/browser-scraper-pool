@@ -12,8 +12,10 @@ from browser_scraper_pool.models.schemas import (
     GotoRequest,
     GotoResponse,
     PoolStatusResponse,
+    ScreenshotFormat,
     ScreenshotRequest,
     ScreenshotResponse,
+    WaitUntilType,
 )
 
 __all__ = [
@@ -28,6 +30,8 @@ __all__ = [
     "GotoRequest",
     "GotoResponse",
     "PoolStatusResponse",
+    "ScreenshotFormat",
     "ScreenshotRequest",
     "ScreenshotResponse",
+    "WaitUntilType",
 ]

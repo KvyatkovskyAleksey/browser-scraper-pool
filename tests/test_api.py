@@ -1,5 +1,6 @@
 """API endpoint tests using httpx AsyncClient."""
 
+import asyncio
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
@@ -431,6 +432,28 @@ class TestScrapingEndpoints:
         data = response.json()
         assert data["result"] == 42
 
+    async def test_execute_timeout(self, client, mock_pool):
+        """Should return 504 on script timeout."""
+        mock_page = AsyncMock()
+
+        async def slow_evaluate(*args, **kwargs):
+            await asyncio.sleep(10)  # Simulate slow script
+
+        mock_page.evaluate = slow_evaluate
+
+        mock_ctx = MagicMock()
+        mock_ctx.in_use = True
+        mock_ctx.page = mock_page
+        mock_pool.get_context.return_value = mock_ctx
+
+        response = await client.post(
+            "/contexts/ctx-123/execute",
+            json={"script": "slow()", "timeout": 1000},  # 1 second timeout
+        )
+
+        assert response.status_code == 504
+        assert "timed out" in response.json()["detail"].lower()
+
     async def test_screenshot_success(self, client, mock_pool):
         """Should take screenshot and return base64."""
         mock_page = AsyncMock()
@@ -442,12 +465,12 @@ class TestScrapingEndpoints:
         mock_pool.get_context.return_value = mock_ctx
 
         response = await client.post(
-            "/contexts/ctx-123/screenshot", json={"full_page": False, "type": "png"}
+            "/contexts/ctx-123/screenshot", json={"full_page": False, "format": "png"}
         )
 
         assert response.status_code == 200
         data = response.json()
-        assert data["type"] == "png"
+        assert data["format"] == "png"
         assert len(data["data"]) > 0  # Base64 encoded
 
     async def test_goto_navigation_error(self, client, mock_pool):

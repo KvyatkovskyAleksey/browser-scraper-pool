@@ -1,10 +1,15 @@
 """Context management API endpoints."""
 
+import asyncio
 import base64
 import logging
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, status
 
+from browser_scraper_pool.api.dependencies import (
+    PoolDep,
+    context_response_from_instance,
+)
 from browser_scraper_pool.models.schemas import (
     ContentResponse,
     ContextCreate,
@@ -29,41 +34,33 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/contexts", tags=["contexts"])
 
 
-def get_pool(request: Request) -> ContextPool:
-    """Get the context pool from app state."""
-    return request.app.state.context_pool
-
-
 # =============================================================================
 # Context CRUD
 # =============================================================================
 
 
 @router.post("", response_model=ContextResponse, status_code=status.HTTP_201_CREATED)
-async def create_context(request: Request, body: ContextCreate):
+async def create_context(pool: PoolDep, body: ContextCreate):
     """Create a new browser context.
 
     Creates an isolated browser context with optional proxy and persistence settings.
     The context includes a clean default page ready for navigation.
     """
-    pool = get_pool(request)
     ctx = await pool.create_context(proxy=body.proxy, persistent=body.persistent)
 
-    logger.info("Created context %s (proxy=%s, persistent=%s)", ctx.id, ctx.proxy, ctx.persistent)
-
-    return ContextResponse(
-        id=ctx.id,
-        proxy=ctx.proxy,
-        persistent=ctx.persistent,
-        in_use=ctx.in_use,
-        created_at=ctx.created_at,
+    logger.info(
+        "Created context %s (proxy=%s, persistent=%s)",
+        ctx.id,
+        ctx.proxy,
+        ctx.persistent,
     )
+
+    return ContextResponse(**context_response_from_instance(ctx))
 
 
 @router.get("", response_model=ContextListResponse)
-async def list_contexts(request: Request):
+async def list_contexts(pool: PoolDep):
     """List all contexts in the pool."""
-    pool = get_pool(request)
     contexts = pool.list_contexts()
 
     return ContextListResponse(
@@ -82,9 +79,8 @@ async def list_contexts(request: Request):
 
 
 @router.get("/{context_id}", response_model=ContextResponse)
-async def get_context(request: Request, context_id: str):
+async def get_context(pool: PoolDep, context_id: str):
     """Get information about a specific context."""
-    pool = get_pool(request)
     ctx = pool.get_context(context_id)
 
     if ctx is None:
@@ -93,23 +89,15 @@ async def get_context(request: Request, context_id: str):
             detail=f"Context not found: {context_id}",
         )
 
-    return ContextResponse(
-        id=ctx.id,
-        proxy=ctx.proxy,
-        persistent=ctx.persistent,
-        in_use=ctx.in_use,
-        created_at=ctx.created_at,
-    )
+    return ContextResponse(**context_response_from_instance(ctx))
 
 
 @router.delete("/{context_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_context(request: Request, context_id: str):
+async def delete_context(pool: PoolDep, context_id: str):
     """Remove and close a context.
 
     The context must not be in use (acquired) when deleting.
     """
-    pool = get_pool(request)
-
     try:
         removed = await pool.remove_context(context_id)
         if not removed:
@@ -131,25 +119,17 @@ async def delete_context(request: Request, context_id: str):
 
 
 @router.post("/{context_id}/acquire", response_model=ContextResponse)
-async def acquire_context(request: Request, context_id: str):
+async def acquire_context(pool: PoolDep, context_id: str):
     """Acquire a context for exclusive use.
 
     Once acquired, the context cannot be acquired by another caller until released.
     This is useful for operations that require exclusive access, like captcha solving.
     """
-    pool = get_pool(request)
-
     try:
         ctx = await pool.acquire_context(context_id)
         logger.info("Acquired context %s", context_id)
 
-        return ContextResponse(
-            id=ctx.id,
-            proxy=ctx.proxy,
-            persistent=ctx.persistent,
-            in_use=ctx.in_use,
-            created_at=ctx.created_at,
-        )
+        return ContextResponse(**context_response_from_instance(ctx))
     except ContextNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -163,12 +143,11 @@ async def acquire_context(request: Request, context_id: str):
 
 
 @router.post("/{context_id}/release", response_model=ContextResponse)
-async def release_context(request: Request, context_id: str):
+async def release_context(pool: PoolDep, context_id: str):
     """Release a context back to the pool.
 
     After release, the context can be acquired again by any caller.
     """
-    pool = get_pool(request)
     ctx = pool.get_context(context_id)
 
     if ctx is None:
@@ -180,13 +159,7 @@ async def release_context(request: Request, context_id: str):
     await pool.release_context(context_id)
     logger.info("Released context %s", context_id)
 
-    return ContextResponse(
-        id=ctx.id,
-        proxy=ctx.proxy,
-        persistent=ctx.persistent,
-        in_use=ctx.in_use,
-        created_at=ctx.created_at,
-    )
+    return ContextResponse(**context_response_from_instance(ctx))
 
 
 # =============================================================================
@@ -214,17 +187,16 @@ def _require_acquired(pool: ContextPool, context_id: str):
 
 
 @router.post("/{context_id}/goto", response_model=GotoResponse)
-async def goto(request: Request, context_id: str, body: GotoRequest):
+async def goto(pool: PoolDep, context_id: str, body: GotoRequest):
     """Navigate to a URL.
 
     The context must be acquired before navigation.
     """
-    pool = get_pool(request)
     ctx = _require_acquired(pool, context_id)
 
     try:
         response = await ctx.page.goto(
-            body.url,
+            str(body.url),  # Convert AnyHttpUrl to string
             timeout=body.timeout,
             wait_until=body.wait_until,
         )
@@ -243,12 +215,11 @@ async def goto(request: Request, context_id: str, body: GotoRequest):
 
 
 @router.post("/{context_id}/content", response_model=ContentResponse)
-async def get_content(request: Request, context_id: str):
+async def get_content(pool: PoolDep, context_id: str):
     """Get the current page HTML content.
 
     The context must be acquired before getting content.
     """
-    pool = get_pool(request)
     ctx = _require_acquired(pool, context_id)
 
     try:
@@ -263,18 +234,28 @@ async def get_content(request: Request, context_id: str):
 
 
 @router.post("/{context_id}/execute", response_model=ExecuteResponse)
-async def execute_script(request: Request, context_id: str, body: ExecuteRequest):
+async def execute_script(pool: PoolDep, context_id: str, body: ExecuteRequest):
     """Execute JavaScript in the page context.
 
     The context must be acquired before executing scripts.
     Returns the result of the script execution (must be JSON-serializable).
     """
-    pool = get_pool(request)
     ctx = _require_acquired(pool, context_id)
 
     try:
-        result = await ctx.page.evaluate(body.script)
+        # page.evaluate doesn't have timeout param, use asyncio.wait_for
+        timeout_seconds = body.timeout / 1000  # Convert ms to seconds
+        result = await asyncio.wait_for(
+            ctx.page.evaluate(body.script),
+            timeout=timeout_seconds,
+        )
         return ExecuteResponse(result=result)
+    except TimeoutError:
+        logger.warning("Script execution timed out for context %s", context_id)
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail=f"Script execution timed out after {body.timeout}ms",
+        ) from None
     except Exception as e:
         logger.warning("Script execution failed for context %s: %s", context_id, e)
         raise HTTPException(
@@ -284,25 +265,24 @@ async def execute_script(request: Request, context_id: str, body: ExecuteRequest
 
 
 @router.post("/{context_id}/screenshot", response_model=ScreenshotResponse)
-async def take_screenshot(request: Request, context_id: str, body: ScreenshotRequest):
+async def take_screenshot(pool: PoolDep, context_id: str, body: ScreenshotRequest):
     """Take a screenshot of the current page.
 
     The context must be acquired before taking screenshots.
     Returns base64-encoded image data.
     """
-    pool = get_pool(request)
     ctx = _require_acquired(pool, context_id)
 
     try:
         screenshot_bytes = await ctx.page.screenshot(
             full_page=body.full_page,
-            type=body.type,
-            quality=body.quality if body.type == "jpeg" else None,
+            type=body.format,  # Playwright uses 'type', we renamed to 'format'
+            quality=body.quality if body.format == "jpeg" else None,
         )
 
         return ScreenshotResponse(
             data=base64.b64encode(screenshot_bytes).decode("utf-8"),
-            type=body.type,
+            format=body.format,
         )
     except Exception as e:
         logger.warning("Screenshot failed for context %s: %s", context_id, e)

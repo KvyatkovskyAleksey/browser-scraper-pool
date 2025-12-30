@@ -1,20 +1,15 @@
 """Pool status API endpoints."""
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter
 
+from browser_scraper_pool.api.dependencies import PoolDep
 from browser_scraper_pool.models.schemas import CDPResponse, PoolStatusResponse
-from browser_scraper_pool.pool.context_pool import ContextPool
 
 router = APIRouter(prefix="/pool", tags=["pool"])
 
 
-def get_pool(request: Request) -> ContextPool:
-    """Get the context pool from app state."""
-    return request.app.state.context_pool
-
-
 @router.get("/status", response_model=PoolStatusResponse)
-async def get_status(request: Request):
+async def get_status(pool: PoolDep):
     """Get the current pool status.
 
     Returns information about the pool including:
@@ -22,8 +17,6 @@ async def get_status(request: Request):
     - CDP connection details
     - Whether the pool is started
     """
-    pool = get_pool(request)
-
     return PoolStatusResponse(
         size=pool.size,
         available=pool.available_count,
@@ -35,14 +28,12 @@ async def get_status(request: Request):
 
 
 @router.get("/cdp", response_model=CDPResponse)
-async def get_cdp(request: Request):
+async def get_cdp(pool: PoolDep):
     """Get the CDP (Chrome DevTools Protocol) endpoint.
 
     Use this endpoint to get the WebSocket URL for connecting external tools
     (like captcha solvers) to the browser via CDP.
     """
-    pool = get_pool(request)
-
     return CDPResponse(
         endpoint=pool.get_cdp_endpoint(),
         port=pool.cdp_port,

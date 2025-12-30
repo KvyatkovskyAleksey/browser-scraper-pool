@@ -1,8 +1,9 @@
 """Pydantic models for API requests and responses."""
 
 from datetime import datetime
+from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import AnyHttpUrl, BaseModel, Field
 
 # =============================================================================
 # Context Models
@@ -68,20 +69,22 @@ class CDPResponse(BaseModel):
 # =============================================================================
 
 
+WaitUntilType = Literal["load", "domcontentloaded", "networkidle", "commit"]
+
+
 class GotoRequest(BaseModel):
     """Request to navigate to a URL."""
 
-    url: str = Field(description="URL to navigate to")
+    url: AnyHttpUrl = Field(description="URL to navigate to")
     timeout: int = Field(
         default=30000,
         description="Navigation timeout in milliseconds",
         ge=1000,
         le=120000,
     )
-    wait_until: str = Field(
+    wait_until: WaitUntilType = Field(
         default="load",
         description="When to consider navigation succeeded",
-        pattern="^(load|domcontentloaded|networkidle|commit)$",
     )
 
 
@@ -123,6 +126,9 @@ class ExecuteResponse(BaseModel):
     )
 
 
+ScreenshotFormat = Literal["png", "jpeg"]
+
+
 class ScreenshotRequest(BaseModel):
     """Request to take a screenshot."""
 
@@ -130,10 +136,9 @@ class ScreenshotRequest(BaseModel):
         default=False,
         description="Whether to capture the full page or just viewport",
     )
-    type: str = Field(
+    format: ScreenshotFormat = Field(
         default="png",
-        description="Screenshot format",
-        pattern="^(png|jpeg)$",
+        description="Screenshot format (png or jpeg)",
     )
     quality: int | None = Field(
         default=None,
@@ -147,7 +152,7 @@ class ScreenshotResponse(BaseModel):
     """Response containing screenshot data."""
 
     data: str = Field(description="Base64-encoded screenshot data")
-    type: str = Field(description="Screenshot format (png or jpeg)")
+    format: ScreenshotFormat = Field(description="Screenshot format (png or jpeg)")
 
 
 # =============================================================================
