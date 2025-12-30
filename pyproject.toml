@@ -9,6 +9,7 @@ dependencies = [
     "patchright>=1.56.0",
     "aio-pika>=9.0.0",
     "pydantic-settings>=2.0",
+    "pyvirtualdisplay>=3.0",
 ]
 
 [project.optional-dependencies]
