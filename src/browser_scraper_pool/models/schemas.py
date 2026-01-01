@@ -22,6 +22,11 @@ class ContextCreate(BaseModel):
         default=False,
         description="If True, saves cookies/storage to disk for reuse",
     )
+    tags: list[str] = Field(
+        default_factory=list,
+        description="Tags for context selection (proxy is auto-added)",
+        examples=[["premium", "protected"]],
+    )
 
 
 class ContextResponse(BaseModel):
@@ -32,6 +37,26 @@ class ContextResponse(BaseModel):
     persistent: bool = Field(description="Whether context persists storage to disk")
     in_use: bool = Field(description="Whether context is currently acquired")
     created_at: datetime = Field(description="When the context was created")
+    tags: list[str] = Field(default_factory=list, description="Context tags")
+    last_used_at: datetime | None = Field(
+        default=None, description="When context was last used"
+    )
+    total_requests: int = Field(default=0, description="Total requests made")
+    error_count: int = Field(default=0, description="Total errors encountered")
+    consecutive_errors: int = Field(default=0, description="Consecutive errors")
+
+
+class ContextTagsUpdate(BaseModel):
+    """Request to update context tags."""
+
+    add: list[str] = Field(
+        default_factory=list,
+        description="Tags to add",
+    )
+    remove: list[str] = Field(
+        default_factory=list,
+        description="Tags to remove",
+    )
 
 
 class ContextListResponse(BaseModel):
@@ -156,7 +181,83 @@ class ScreenshotResponse(BaseModel):
 
 
 # =============================================================================
-# Job Models (Queued Scraping)
+# Unified Scrape Models
+# =============================================================================
+
+
+class ScrapeRequest(BaseModel):
+    """Request for unified scrape endpoint."""
+
+    url: AnyHttpUrl = Field(description="URL to navigate to")
+
+    # Context selection
+    tags: list[str] = Field(
+        default_factory=list,
+        description="Required tags (all must match). Empty means any context.",
+    )
+    proxy: str | None = Field(
+        default=None,
+        description="Shorthand for tag 'proxy:{value}'. Context with this proxy will be selected.",
+    )
+
+    # Behavior
+    timeout: int = Field(
+        default=30000,
+        description="Navigation timeout in milliseconds",
+        ge=1000,
+        le=120000,
+    )
+    wait_until: WaitUntilType = Field(
+        default="load",
+        description="When to consider navigation succeeded",
+    )
+    get_content: bool = Field(
+        default=True,
+        description="Whether to return page HTML content",
+    )
+    script: str | None = Field(
+        default=None,
+        description="JavaScript code to execute after navigation",
+    )
+    screenshot: bool = Field(
+        default=False,
+        description="Whether to take a screenshot",
+    )
+    screenshot_full_page: bool = Field(
+        default=False,
+        description="Whether to capture full page (if screenshot=True)",
+    )
+
+    # Rate limiting
+    domain_delay: int | None = Field(
+        default=None,
+        description="Override default delay between requests to same domain (ms)",
+    )
+
+
+class ScrapeResponse(BaseModel):
+    """Response from unified scrape endpoint."""
+
+    success: bool = Field(description="Whether the scrape succeeded")
+    url: str = Field(description="Final URL after navigation")
+    status: int | None = Field(description="HTTP response status code")
+    content: str | None = Field(default=None, description="Page HTML content")
+    script_result: str | int | float | bool | dict | list | None = Field(
+        default=None, description="Result of script execution"
+    )
+    screenshot: str | None = Field(
+        default=None, description="Base64-encoded screenshot"
+    )
+    context_id: str = Field(description="ID of the context used")
+    queue_wait_ms: int = Field(
+        default=0,
+        description="Time spent waiting for context in queue (ms)",
+    )
+    error: str | None = Field(default=None, description="Error message if failed")
+
+
+# =============================================================================
+# Job Models (Queued Scraping) - DEPRECATED
 # =============================================================================
 
 

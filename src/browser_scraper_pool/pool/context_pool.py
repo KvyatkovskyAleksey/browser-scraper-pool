@@ -60,8 +60,22 @@ class ContextInstance:
     proxy: str | None = None
     persistent: bool = False
     storage_path: Path | None = None
+
+    # Tags for context selection (e.g., {"proxy:1.1.1.1", "premium", "protected"})
+    tags: set[str] = field(default_factory=set)
+
+    # State tracking
     in_use: bool = False
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    last_used_at: datetime | None = None
+
+    # Health tracking
+    total_requests: int = 0
+    error_count: int = 0
+    consecutive_errors: int = 0
+
+    # Domain rate limiting - tracks last request time per domain
+    domain_last_request: dict[str, datetime] = field(default_factory=dict)
 
 
 class ContextPool:
@@ -236,12 +250,14 @@ class ContextPool:
         self,
         proxy: str | None = None,
         persistent: bool = False,
+        tags: set[str] | list[str] | None = None,
     ) -> ContextInstance:
         """Create a new browser context.
 
         Args:
             proxy: Optional proxy server URL (e.g., "http://user:pass@host:port")
             persistent: If True, saves cookies/storage to disk for reuse
+            tags: Optional tags for context selection (proxy is auto-added as tag)
 
         Returns:
             ContextInstance with a ready-to-use page
@@ -267,6 +283,11 @@ class ContextPool:
         context = await self._browser.new_context(**context_options)
         page = await context.new_page()
 
+        # Build tags set - auto-add proxy as tag
+        context_tags: set[str] = set(tags) if tags else set()
+        if proxy:
+            context_tags.add(f"proxy:{proxy}")
+
         instance = ContextInstance(
             id=context_id,
             context=context,
@@ -274,6 +295,7 @@ class ContextPool:
             proxy=proxy,
             persistent=persistent,
             storage_path=storage_path,
+            tags=context_tags,
         )
 
         self._contexts[context_id] = instance
@@ -381,22 +403,234 @@ class ContextPool:
         """
         return self._contexts.get(context_id)
 
-    def list_contexts(self) -> list[dict]:
-        """List all contexts in the pool.
+    def list_contexts(
+        self,
+        tags: set[str] | list[str] | None = None,
+    ) -> list[dict]:
+        """List all contexts in the pool, optionally filtered by tags.
+
+        Args:
+            tags: If provided, only return contexts that have ALL these tags
 
         Returns:
             List of context info dictionaries
         """
-        return [
-            {
+        required_tags = set(tags) if tags else None
+
+        results = []
+        for instance in self._contexts.values():
+            # Filter by tags if specified
+            if required_tags and not required_tags.issubset(instance.tags):
+                continue
+
+            results.append({
                 "id": instance.id,
                 "proxy": instance.proxy,
                 "persistent": instance.persistent,
                 "in_use": instance.in_use,
                 "created_at": instance.created_at.isoformat(),
-            }
-            for instance in self._contexts.values()
-        ]
+                "tags": list(instance.tags),
+                "last_used_at": (
+                    instance.last_used_at.isoformat() if instance.last_used_at else None
+                ),
+                "total_requests": instance.total_requests,
+                "error_count": instance.error_count,
+                "consecutive_errors": instance.consecutive_errors,
+            })
+
+        return results
+
+    def add_tags(self, context_id: str, tags: set[str] | list[str]) -> bool:
+        """Add tags to a context.
+
+        Args:
+            context_id: The ID of the context
+            tags: Tags to add
+
+        Returns:
+            True if context found and tags added, False if context not found
+        """
+        instance = self._contexts.get(context_id)
+        if not instance:
+            return False
+        instance.tags.update(tags)
+        return True
+
+    def remove_tags(self, context_id: str, tags: set[str] | list[str]) -> bool:
+        """Remove tags from a context.
+
+        Args:
+            context_id: The ID of the context
+            tags: Tags to remove
+
+        Returns:
+            True if context found and tags removed, False if context not found
+        """
+        instance = self._contexts.get(context_id)
+        if not instance:
+            return False
+        instance.tags.difference_update(tags)
+        return True
+
+    def select_context(
+        self,
+        tags: set[str] | list[str] | None = None,
+        domain: str | None = None,
+        domain_delay_ms: int | None = None,
+    ) -> ContextInstance | None:
+        """Find best available context matching criteria.
+
+        Selection order:
+        1. Filter by tags (all must match)
+        2. Filter by availability (not in_use)
+        3. Filter by rate limit (domain not rate-limited)
+        4. Sort by health score (prefer healthier contexts)
+
+        Args:
+            tags: Required tags (all must match). None means no tag filter.
+            domain: Domain for rate limit check. None skips rate limit check.
+            domain_delay_ms: Override delay for rate limit check.
+
+        Returns:
+            Best available ContextInstance, or None if no match.
+        """
+        # Import here to avoid circular dependency
+        from browser_scraper_pool.config import settings  # noqa: PLC0415, I001
+        from browser_scraper_pool.pool.rate_limiter import DomainRateLimiter  # noqa: PLC0415
+
+        required_tags = set(tags) if tags else None
+        candidates: list[ContextInstance] = []
+
+        for ctx in self._contexts.values():
+            # Filter: must not be in use
+            if ctx.in_use:
+                continue
+
+            # Filter: must have all required tags
+            if required_tags and not required_tags.issubset(ctx.tags):
+                continue
+
+            # Filter: must not be rate-limited for domain
+            if domain:
+                limiter = DomainRateLimiter(
+                    default_delay_ms=settings.default_domain_delay_ms
+                )
+                if not limiter.can_request(ctx, domain, domain_delay_ms):
+                    continue
+
+            candidates.append(ctx)
+
+        if not candidates:
+            return None
+
+        # Sort by health score (lower is better - fewer errors preferred)
+        def health_score(ctx: ContextInstance) -> float:
+            error_rate = (
+                ctx.error_count / ctx.total_requests if ctx.total_requests > 0 else 0
+            )
+            return ctx.consecutive_errors * 10 + error_rate * 5
+
+        candidates.sort(key=health_score)
+        return candidates[0]
+
+    def get_available_contexts(
+        self,
+        tags: set[str] | list[str] | None = None,
+    ) -> list[ContextInstance]:
+        """Get all available (not in use) contexts, optionally filtered by tags.
+
+        Args:
+            tags: Required tags (all must match). None means no tag filter.
+
+        Returns:
+            List of available ContextInstance objects.
+        """
+        required_tags = set(tags) if tags else None
+        results = []
+
+        for ctx in self._contexts.values():
+            if ctx.in_use:
+                continue
+            if required_tags and not required_tags.issubset(ctx.tags):
+                continue
+            results.append(ctx)
+
+        return results
+
+    async def evict_and_replace(
+        self,
+        tags: set[str] | list[str] | None = None,
+        proxy: str | None = None,
+    ) -> ContextInstance | None:
+        """Evict worst-scoring context and create a new one with given tags.
+
+        Used when pool is full and no matching context available.
+
+        Args:
+            tags: Tags for the new context.
+            proxy: Proxy for the new context.
+
+        Returns:
+            New ContextInstance, or None if no context could be evicted.
+        """
+        from browser_scraper_pool.config import settings  # noqa: PLC0415, I001
+        from browser_scraper_pool.pool.eviction import find_eviction_candidate  # noqa: PLC0415
+
+        # Check if pool is at capacity
+        if self.size < settings.max_contexts:
+            # Pool not full, just create a new context
+            return await self.create_context(proxy=proxy, tags=tags)
+
+        # Find eviction candidate
+        candidate = find_eviction_candidate(self._contexts)
+        if not candidate:
+            return None
+
+        # Evict the candidate
+        logger.info(
+            "Evicting context %s (score-based replacement)",
+            candidate.id,
+        )
+        await self.remove_context(candidate.id)
+
+        # Create new context with requested tags
+        return await self.create_context(proxy=proxy, tags=tags)
+
+    async def recreate_context(self, context_id: str) -> ContextInstance | None:
+        """Recreate a context, preserving its tags and proxy.
+
+        Used when a context has too many consecutive errors.
+
+        Args:
+            context_id: The ID of the context to recreate.
+
+        Returns:
+            New ContextInstance, or None if original context not found.
+        """
+        ctx = self.get_context(context_id)
+        if not ctx:
+            return None
+
+        # Save properties to recreate
+        proxy = ctx.proxy
+        persistent = ctx.persistent
+        tags = ctx.tags.copy()
+
+        # Remove proxy auto-tag since create_context will add it
+        if proxy:
+            tags.discard(f"proxy:{proxy}")
+
+        # Close old context
+        logger.info("Recreating context %s due to consecutive errors", context_id)
+        ctx.in_use = False  # Force release so we can remove it
+        await self.remove_context(context_id)
+
+        # Create new context with same properties
+        return await self.create_context(
+            proxy=proxy,
+            persistent=persistent,
+            tags=tags,
+        )
 
     def get_cdp_endpoint(self) -> str:
         """Get the CDP WebSocket endpoint URL.

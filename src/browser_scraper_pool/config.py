@@ -22,6 +22,21 @@ class Settings(BaseSettings):
     # Persistent contexts storage
     persistent_contexts_path: str = "./data/contexts"
 
+    # Pool limits
+    max_contexts: int = 10
+
+    # Rate limiting
+    default_domain_delay_ms: int = 1000  # 1 second between same-domain requests
+
+    # Queue
+    max_queue_wait_seconds: int = 300  # 5 minutes
+
+    # Health & eviction
+    max_consecutive_errors: int = 5  # Recreate context after this many
+    eviction_idle_weight: float = 1.0
+    eviction_error_weight: float = 2.0
+    eviction_age_weight: float = 0.5
+
     # Logging
     log_level: str = "INFO"
 
