@@ -77,6 +77,9 @@ class ContextInstance:
     # Domain rate limiting - tracks last request time per domain
     domain_last_request: dict[str, datetime] = field(default_factory=dict)
 
+    # CDP target URL for external CDP connections
+    cdp_target_url: str | None = None
+
 
 class ContextPool:
     """Singleton context pool managing a single browser with multiple contexts.
@@ -283,6 +286,17 @@ class ContextPool:
         context = await self._browser.new_context(**context_options)
         page = await context.new_page()
 
+        # Get CDP target URL for this page
+        cdp_target_url: str | None = None
+        try:
+            cdp_session = await context.new_cdp_session(page)
+            target_info = await cdp_session.send("Target.getTargetInfo")
+            target_id = target_info["targetInfo"]["targetId"]
+            cdp_target_url = f"ws://127.0.0.1:{self._cdp_port}/devtools/page/{target_id}"
+            await cdp_session.detach()
+        except Exception:
+            logger.debug("Failed to get CDP target URL", exc_info=True)
+
         # Build tags set - auto-add proxy as tag
         context_tags: set[str] = set(tags) if tags else set()
         if proxy:
@@ -296,6 +310,7 @@ class ContextPool:
             persistent=persistent,
             storage_path=storage_path,
             tags=context_tags,
+            cdp_target_url=cdp_target_url,
         )
 
         self._contexts[context_id] = instance
@@ -436,6 +451,7 @@ class ContextPool:
                 "total_requests": instance.total_requests,
                 "error_count": instance.error_count,
                 "consecutive_errors": instance.consecutive_errors,
+                "cdp_url": instance.cdp_target_url,
             })
 
         return results

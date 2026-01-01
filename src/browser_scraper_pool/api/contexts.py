@@ -93,6 +93,7 @@ async def list_contexts(
                 total_requests=c["total_requests"],
                 error_count=c["error_count"],
                 consecutive_errors=c["consecutive_errors"],
+                cdp_url=c["cdp_url"],
             )
             for c in contexts
         ],

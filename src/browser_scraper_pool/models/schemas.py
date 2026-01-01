@@ -44,6 +44,10 @@ class ContextResponse(BaseModel):
     total_requests: int = Field(default=0, description="Total requests made")
     error_count: int = Field(default=0, description="Total errors encountered")
     consecutive_errors: int = Field(default=0, description="Consecutive errors")
+    cdp_url: str | None = Field(
+        default=None,
+        description="CDP WebSocket URL to connect to this specific page",
+    )
 
 
 class ContextTagsUpdate(BaseModel):

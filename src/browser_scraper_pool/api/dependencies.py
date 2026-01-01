@@ -36,4 +36,5 @@ def context_response_from_instance(ctx: ContextInstance) -> dict:
         "total_requests": ctx.total_requests,
         "error_count": ctx.error_count,
         "consecutive_errors": ctx.consecutive_errors,
+        "cdp_url": ctx.cdp_target_url,
     }

@@ -132,6 +132,7 @@ class TestContextCRUD:
         mock_ctx.total_requests = 0
         mock_ctx.error_count = 0
         mock_ctx.consecutive_errors = 0
+        mock_ctx.cdp_target_url = "ws://127.0.0.1:9222/devtools/page/test-target"
 
         mock_pool.create_context = AsyncMock(return_value=mock_ctx)
 
@@ -158,6 +159,7 @@ class TestContextCRUD:
         mock_ctx.total_requests = 0
         mock_ctx.error_count = 0
         mock_ctx.consecutive_errors = 0
+        mock_ctx.cdp_target_url = "ws://127.0.0.1:9222/devtools/page/test-target"
 
         mock_pool.create_context = AsyncMock(return_value=mock_ctx)
 
@@ -185,6 +187,7 @@ class TestContextCRUD:
         mock_ctx.total_requests = 0
         mock_ctx.error_count = 0
         mock_ctx.consecutive_errors = 0
+        mock_ctx.cdp_target_url = "ws://127.0.0.1:9222/devtools/page/test-target"
 
         mock_pool.create_context = AsyncMock(return_value=mock_ctx)
 
@@ -217,6 +220,7 @@ class TestContextCRUD:
                 "total_requests": 0,
                 "error_count": 0,
                 "consecutive_errors": 0,
+                "cdp_url": "ws://127.0.0.1:9222/devtools/page/target-1",
             },
             {
                 "id": "ctx-2",
@@ -229,6 +233,7 @@ class TestContextCRUD:
                 "total_requests": 5,
                 "error_count": 1,
                 "consecutive_errors": 0,
+                "cdp_url": "ws://127.0.0.1:9222/devtools/page/target-2",
             },
         ]
 
@@ -255,6 +260,7 @@ class TestContextCRUD:
         mock_ctx.total_requests = 0
         mock_ctx.error_count = 0
         mock_ctx.consecutive_errors = 0
+        mock_ctx.cdp_target_url = "ws://127.0.0.1:9222/devtools/page/test-target"
 
         mock_pool.get_context.return_value = mock_ctx
 
@@ -288,6 +294,7 @@ class TestContextCRUD:
                 "total_requests": 0,
                 "error_count": 0,
                 "consecutive_errors": 0,
+                "cdp_url": "ws://127.0.0.1:9222/devtools/page/target-1",
             },
         ]
 
@@ -312,6 +319,7 @@ class TestContextCRUD:
         mock_ctx.total_requests = 0
         mock_ctx.error_count = 0
         mock_ctx.consecutive_errors = 0
+        mock_ctx.cdp_target_url = "ws://127.0.0.1:9222/devtools/page/test-target"
 
         mock_pool.get_context.return_value = mock_ctx
         mock_pool.add_tags.return_value = True
@@ -385,6 +393,7 @@ class TestAcquireRelease:
         mock_ctx.total_requests = 0
         mock_ctx.error_count = 0
         mock_ctx.consecutive_errors = 0
+        mock_ctx.cdp_target_url = "ws://127.0.0.1:9222/devtools/page/test-target"
 
         mock_pool.acquire_context = AsyncMock(return_value=mock_ctx)
 
@@ -427,6 +436,7 @@ class TestAcquireRelease:
         mock_ctx.total_requests = 0
         mock_ctx.error_count = 0
         mock_ctx.consecutive_errors = 0
+        mock_ctx.cdp_target_url = "ws://127.0.0.1:9222/devtools/page/test-target"
 
         mock_pool.get_context.return_value = mock_ctx
         mock_pool.release_context = AsyncMock()
