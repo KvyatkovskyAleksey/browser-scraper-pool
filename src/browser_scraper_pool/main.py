@@ -5,21 +5,18 @@ from fastapi import FastAPI
 
 from browser_scraper_pool.api import (
     contexts_router,
-    jobs_router,
     pool_router,
     scrape_router,
 )
 from browser_scraper_pool.pool.context_pool import ContextPool
-from browser_scraper_pool.queue.publisher import JobPublisher
 
 logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Manage application lifespan - start/stop context pool and RabbitMQ."""
+    """Manage application lifespan - start/stop context pool."""
     pool = ContextPool.get_instance()
-    publisher = JobPublisher.get_instance()
 
     async with pool:
         app.state.context_pool = pool
@@ -30,19 +27,8 @@ async def lifespan(app: FastAPI):
             pool.cdp_port,
         )
 
-        # Connect to RabbitMQ (optional - may not be available)
-        try:
-            await publisher.connect()
-            logger.info("Connected to RabbitMQ")
-        except Exception:
-            logger.warning(
-                "Could not connect to RabbitMQ. Job queue will be unavailable."
-            )
-
         yield
 
-        # Disconnect from RabbitMQ
-        await publisher.disconnect()
         logger.info("Context pool stopped")
 
 
@@ -57,7 +43,6 @@ app = FastAPI(
 app.include_router(scrape_router)  # Main endpoint
 app.include_router(contexts_router)
 app.include_router(pool_router)
-app.include_router(jobs_router)  # Deprecated
 
 
 @app.get("/", tags=["root"])

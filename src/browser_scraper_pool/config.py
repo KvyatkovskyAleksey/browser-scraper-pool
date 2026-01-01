@@ -10,9 +10,6 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # RabbitMQ
-    rabbitmq_url: str = "amqp://guest:guest@localhost/"
-
     # Browser
     browser_headless: bool = False
     use_virtual_display: bool = True
