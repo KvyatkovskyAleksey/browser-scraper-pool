@@ -3,7 +3,12 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from browser_scraper_pool.api import contexts_router, jobs_router, pool_router
+from browser_scraper_pool.api import (
+    contexts_router,
+    jobs_router,
+    pool_router,
+    scrape_router,
+)
 from browser_scraper_pool.pool.context_pool import ContextPool
 from browser_scraper_pool.queue.publisher import JobPublisher
 
@@ -49,9 +54,10 @@ app = FastAPI(
 )
 
 # Include routers
+app.include_router(scrape_router)  # Main endpoint
 app.include_router(contexts_router)
 app.include_router(pool_router)
-app.include_router(jobs_router)
+app.include_router(jobs_router)  # Deprecated
 
 
 @app.get("/", tags=["root"])

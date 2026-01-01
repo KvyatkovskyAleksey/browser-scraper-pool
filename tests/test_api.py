@@ -127,6 +127,11 @@ class TestContextCRUD:
         mock_ctx.persistent = False
         mock_ctx.in_use = False
         mock_ctx.created_at = datetime.now(UTC)
+        mock_ctx.tags = set()
+        mock_ctx.last_used_at = None
+        mock_ctx.total_requests = 0
+        mock_ctx.error_count = 0
+        mock_ctx.consecutive_errors = 0
 
         mock_pool.create_context = AsyncMock(return_value=mock_ctx)
 
@@ -138,7 +143,7 @@ class TestContextCRUD:
         assert data["proxy"] is None
         assert data["persistent"] is False
         assert data["in_use"] is False
-        mock_pool.create_context.assert_called_once_with(proxy=None, persistent=False)
+        mock_pool.create_context.assert_called_once_with(proxy=None, persistent=False, tags=[])
 
     async def test_create_context_with_proxy(self, client, mock_pool):
         """Should create context with proxy."""
@@ -148,6 +153,11 @@ class TestContextCRUD:
         mock_ctx.persistent = False
         mock_ctx.in_use = False
         mock_ctx.created_at = datetime.now(UTC)
+        mock_ctx.tags = {"proxy:http://proxy:8080"}
+        mock_ctx.last_used_at = None
+        mock_ctx.total_requests = 0
+        mock_ctx.error_count = 0
+        mock_ctx.consecutive_errors = 0
 
         mock_pool.create_context = AsyncMock(return_value=mock_ctx)
 
@@ -159,7 +169,7 @@ class TestContextCRUD:
         data = response.json()
         assert data["proxy"] == "http://proxy:8080"
         mock_pool.create_context.assert_called_once_with(
-            proxy="http://proxy:8080", persistent=False
+            proxy="http://proxy:8080", persistent=False, tags=[]
         )
 
     async def test_create_context_persistent(self, client, mock_pool):
@@ -170,6 +180,11 @@ class TestContextCRUD:
         mock_ctx.persistent = True
         mock_ctx.in_use = False
         mock_ctx.created_at = datetime.now(UTC)
+        mock_ctx.tags = set()
+        mock_ctx.last_used_at = None
+        mock_ctx.total_requests = 0
+        mock_ctx.error_count = 0
+        mock_ctx.consecutive_errors = 0
 
         mock_pool.create_context = AsyncMock(return_value=mock_ctx)
 
@@ -197,6 +212,11 @@ class TestContextCRUD:
                 "persistent": False,
                 "in_use": True,
                 "created_at": "2025-01-15T10:00:00+00:00",
+                "tags": [],
+                "last_used_at": None,
+                "total_requests": 0,
+                "error_count": 0,
+                "consecutive_errors": 0,
             },
             {
                 "id": "ctx-2",
@@ -204,6 +224,11 @@ class TestContextCRUD:
                 "persistent": True,
                 "in_use": False,
                 "created_at": "2025-01-15T11:00:00+00:00",
+                "tags": ["proxy:http://proxy:8080"],
+                "last_used_at": None,
+                "total_requests": 5,
+                "error_count": 1,
+                "consecutive_errors": 0,
             },
         ]
 
@@ -215,6 +240,7 @@ class TestContextCRUD:
         assert data["total"] == 2
         assert data["contexts"][0]["id"] == "ctx-1"
         assert data["contexts"][1]["proxy"] == "http://proxy:8080"
+        assert data["contexts"][1]["tags"] == ["proxy:http://proxy:8080"]
 
     async def test_get_context(self, client, mock_pool):
         """Should return specific context."""
@@ -224,6 +250,11 @@ class TestContextCRUD:
         mock_ctx.persistent = False
         mock_ctx.in_use = True
         mock_ctx.created_at = datetime.now(UTC)
+        mock_ctx.tags = set()
+        mock_ctx.last_used_at = None
+        mock_ctx.total_requests = 0
+        mock_ctx.error_count = 0
+        mock_ctx.consecutive_errors = 0
 
         mock_pool.get_context.return_value = mock_ctx
 
@@ -242,6 +273,69 @@ class TestContextCRUD:
 
         assert response.status_code == 404
         assert "not found" in response.json()["detail"].lower()
+
+    async def test_list_contexts_with_tag_filter(self, client, mock_pool):
+        """Should filter contexts by tags."""
+        mock_pool.list_contexts.return_value = [
+            {
+                "id": "ctx-1",
+                "proxy": "http://proxy:8080",
+                "persistent": False,
+                "in_use": False,
+                "created_at": "2025-01-15T10:00:00+00:00",
+                "tags": ["premium", "proxy:http://proxy:8080"],
+                "last_used_at": None,
+                "total_requests": 0,
+                "error_count": 0,
+                "consecutive_errors": 0,
+            },
+        ]
+
+        response = await client.get("/contexts?tags=premium")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["contexts"]) == 1
+        assert "premium" in data["contexts"][0]["tags"]
+        mock_pool.list_contexts.assert_called_once_with(tags=["premium"])
+
+    async def test_update_tags(self, client, mock_pool):
+        """Should add and remove tags."""
+        mock_ctx = MagicMock()
+        mock_ctx.id = "ctx-123"
+        mock_ctx.proxy = None
+        mock_ctx.persistent = False
+        mock_ctx.in_use = False
+        mock_ctx.created_at = datetime.now(UTC)
+        mock_ctx.tags = {"new-tag"}
+        mock_ctx.last_used_at = None
+        mock_ctx.total_requests = 0
+        mock_ctx.error_count = 0
+        mock_ctx.consecutive_errors = 0
+
+        mock_pool.get_context.return_value = mock_ctx
+        mock_pool.add_tags.return_value = True
+        mock_pool.remove_tags.return_value = True
+
+        response = await client.patch(
+            "/contexts/ctx-123/tags",
+            json={"add": ["new-tag"], "remove": ["old-tag"]},
+        )
+
+        assert response.status_code == 200
+        mock_pool.add_tags.assert_called_once_with("ctx-123", ["new-tag"])
+        mock_pool.remove_tags.assert_called_once_with("ctx-123", ["old-tag"])
+
+    async def test_update_tags_not_found(self, client, mock_pool):
+        """Should return 404 when updating tags on unknown context."""
+        mock_pool.get_context.return_value = None
+
+        response = await client.patch(
+            "/contexts/unknown/tags",
+            json={"add": ["new-tag"]},
+        )
+
+        assert response.status_code == 404
 
     async def test_delete_context(self, client, mock_pool):
         """Should delete context."""
@@ -286,6 +380,11 @@ class TestAcquireRelease:
         mock_ctx.persistent = False
         mock_ctx.in_use = True
         mock_ctx.created_at = datetime.now(UTC)
+        mock_ctx.tags = set()
+        mock_ctx.last_used_at = None
+        mock_ctx.total_requests = 0
+        mock_ctx.error_count = 0
+        mock_ctx.consecutive_errors = 0
 
         mock_pool.acquire_context = AsyncMock(return_value=mock_ctx)
 
@@ -323,6 +422,11 @@ class TestAcquireRelease:
         mock_ctx.persistent = False
         mock_ctx.in_use = False
         mock_ctx.created_at = datetime.now(UTC)
+        mock_ctx.tags = set()
+        mock_ctx.last_used_at = None
+        mock_ctx.total_requests = 0
+        mock_ctx.error_count = 0
+        mock_ctx.consecutive_errors = 0
 
         mock_pool.get_context.return_value = mock_ctx
         mock_pool.release_context = AsyncMock()

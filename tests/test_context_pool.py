@@ -418,6 +418,184 @@ class TestListContexts:
         assert result[0]["in_use"] is True
         assert "created_at" in result[0]
 
+    async def test_list_contexts_filter_by_tags(self, mock_playwright, mock_display):
+        """list_contexts() should filter by tags."""
+        pool = ContextPool(headless=True, use_virtual_display=False)
+        await pool.start()
+        ctx1 = await pool.create_context(tags=["premium"])
+        await pool.create_context(tags=["basic"])
+
+        result = pool.list_contexts(tags=["premium"])
+
+        assert len(result) == 1
+        assert result[0]["id"] == ctx1.id
+        assert "premium" in result[0]["tags"]
+
+
+# =============================================================================
+# Tags Tests
+# =============================================================================
+
+
+class TestTags:
+    """Tests for tag management."""
+
+    async def test_create_context_with_tags(self, mock_playwright, mock_display):
+        """create_context() should accept and store tags."""
+        pool = ContextPool(headless=True, use_virtual_display=False)
+        await pool.start()
+
+        ctx = await pool.create_context(tags=["premium", "fast"])
+
+        assert "premium" in ctx.tags
+        assert "fast" in ctx.tags
+
+    async def test_create_context_proxy_auto_tag(self, mock_playwright, mock_display):
+        """create_context() should auto-add proxy as tag."""
+        pool = ContextPool(headless=True, use_virtual_display=False)
+        await pool.start()
+
+        ctx = await pool.create_context(proxy="http://proxy:8080")
+
+        assert "proxy:http://proxy:8080" in ctx.tags
+
+    async def test_add_tags(self, mock_playwright, mock_display):
+        """add_tags() should add tags to context."""
+        pool = ContextPool(headless=True, use_virtual_display=False)
+        await pool.start()
+        ctx = await pool.create_context()
+
+        result = pool.add_tags(ctx.id, ["new-tag", "another"])
+
+        assert result is True
+        assert "new-tag" in ctx.tags
+        assert "another" in ctx.tags
+
+    async def test_add_tags_unknown_context(self, mock_playwright, mock_display):
+        """add_tags() on unknown context should return False."""
+        pool = ContextPool(headless=True, use_virtual_display=False)
+        await pool.start()
+
+        result = pool.add_tags("unknown-id", ["tag"])
+
+        assert result is False
+
+    async def test_remove_tags(self, mock_playwright, mock_display):
+        """remove_tags() should remove tags from context."""
+        pool = ContextPool(headless=True, use_virtual_display=False)
+        await pool.start()
+        ctx = await pool.create_context(tags=["keep", "remove-me"])
+
+        result = pool.remove_tags(ctx.id, ["remove-me"])
+
+        assert result is True
+        assert "keep" in ctx.tags
+        assert "remove-me" not in ctx.tags
+
+    async def test_remove_tags_unknown_context(self, mock_playwright, mock_display):
+        """remove_tags() on unknown context should return False."""
+        pool = ContextPool(headless=True, use_virtual_display=False)
+        await pool.start()
+
+        result = pool.remove_tags("unknown-id", ["tag"])
+
+        assert result is False
+
+
+# =============================================================================
+# Context Selection Tests
+# =============================================================================
+
+
+class TestContextSelection:
+    """Tests for smart context selection."""
+
+    async def test_select_context_returns_available(self, mock_playwright, mock_display):
+        """select_context() should return available context."""
+        pool = ContextPool(headless=True, use_virtual_display=False)
+        await pool.start()
+        ctx = await pool.create_context()
+
+        result = pool.select_context()
+
+        assert result is ctx
+
+    async def test_select_context_skips_in_use(self, mock_playwright, mock_display):
+        """select_context() should skip contexts in use."""
+        pool = ContextPool(headless=True, use_virtual_display=False)
+        await pool.start()
+        ctx1 = await pool.create_context()
+        ctx2 = await pool.create_context()
+        await pool.acquire_context(ctx1.id)
+
+        result = pool.select_context()
+
+        assert result is ctx2
+
+    async def test_select_context_filters_by_tags(self, mock_playwright, mock_display):
+        """select_context() should filter by tags."""
+        pool = ContextPool(headless=True, use_virtual_display=False)
+        await pool.start()
+        await pool.create_context(tags=["basic"])
+        ctx2 = await pool.create_context(tags=["premium"])
+
+        result = pool.select_context(tags=["premium"])
+
+        assert result is ctx2
+
+    async def test_select_context_returns_none_when_no_match(
+        self, mock_playwright, mock_display
+    ):
+        """select_context() should return None when no match."""
+        pool = ContextPool(headless=True, use_virtual_display=False)
+        await pool.start()
+        await pool.create_context(tags=["basic"])
+
+        result = pool.select_context(tags=["premium"])
+
+        assert result is None
+
+    async def test_select_context_prefers_healthier(self, mock_playwright, mock_display):
+        """select_context() should prefer healthier contexts."""
+        pool = ContextPool(headless=True, use_virtual_display=False)
+        await pool.start()
+        ctx1 = await pool.create_context()
+        ctx2 = await pool.create_context()
+
+        # Make ctx1 less healthy
+        ctx1.consecutive_errors = 3
+        ctx1.error_count = 5
+        ctx1.total_requests = 10
+
+        result = pool.select_context()
+
+        assert result is ctx2
+
+    async def test_get_available_contexts(self, mock_playwright, mock_display):
+        """get_available_contexts() should return all available contexts."""
+        pool = ContextPool(headless=True, use_virtual_display=False)
+        await pool.start()
+        ctx1 = await pool.create_context()
+        ctx2 = await pool.create_context()
+        await pool.acquire_context(ctx1.id)
+
+        result = pool.get_available_contexts()
+
+        assert len(result) == 1
+        assert result[0] is ctx2
+
+    async def test_get_available_contexts_with_tags(self, mock_playwright, mock_display):
+        """get_available_contexts() should filter by tags."""
+        pool = ContextPool(headless=True, use_virtual_display=False)
+        await pool.start()
+        await pool.create_context(tags=["basic"])
+        ctx2 = await pool.create_context(tags=["premium"])
+
+        result = pool.get_available_contexts(tags=["premium"])
+
+        assert len(result) == 1
+        assert result[0] is ctx2
+
 
 # =============================================================================
 # CDP Endpoint Tests
