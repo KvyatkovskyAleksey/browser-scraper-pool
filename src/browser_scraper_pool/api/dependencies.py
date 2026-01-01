@@ -31,4 +31,9 @@ def context_response_from_instance(ctx: ContextInstance) -> dict:
         "persistent": ctx.persistent,
         "in_use": ctx.in_use,
         "created_at": ctx.created_at,
+        "tags": list(ctx.tags),
+        "last_used_at": ctx.last_used_at,
+        "total_requests": ctx.total_requests,
+        "error_count": ctx.error_count,
+        "consecutive_errors": ctx.consecutive_errors,
     }

@@ -3,8 +3,9 @@
 import asyncio
 import base64
 import logging
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 
 from browser_scraper_pool.api.dependencies import (
     PoolDep,
@@ -15,6 +16,7 @@ from browser_scraper_pool.models.schemas import (
     ContextCreate,
     ContextListResponse,
     ContextResponse,
+    ContextTagsUpdate,
     ExecuteRequest,
     ExecuteResponse,
     GotoRequest,
@@ -43,25 +45,40 @@ router = APIRouter(prefix="/contexts", tags=["contexts"])
 async def create_context(pool: PoolDep, body: ContextCreate):
     """Create a new browser context.
 
-    Creates an isolated browser context with optional proxy and persistence settings.
+    Creates an isolated browser context with optional proxy, persistence, and tags.
     The context includes a clean default page ready for navigation.
+    Proxy is automatically added as a tag (e.g., "proxy:http://...").
     """
-    ctx = await pool.create_context(proxy=body.proxy, persistent=body.persistent)
+    ctx = await pool.create_context(
+        proxy=body.proxy,
+        persistent=body.persistent,
+        tags=body.tags,
+    )
 
     logger.info(
-        "Created context %s (proxy=%s, persistent=%s)",
+        "Created context %s (proxy=%s, persistent=%s, tags=%s)",
         ctx.id,
         ctx.proxy,
         ctx.persistent,
+        ctx.tags,
     )
 
     return ContextResponse(**context_response_from_instance(ctx))
 
 
 @router.get("", response_model=ContextListResponse)
-async def list_contexts(pool: PoolDep):
-    """List all contexts in the pool."""
-    contexts = pool.list_contexts()
+async def list_contexts(
+    pool: PoolDep,
+    tags: Annotated[
+        str | None,
+        Query(description="Comma-separated tags to filter by (all must match)"),
+    ] = None,
+):
+    """List all contexts in the pool, optionally filtered by tags."""
+    # Parse comma-separated tags
+    tag_filter = tags.split(",") if tags else None
+
+    contexts = pool.list_contexts(tags=tag_filter)
 
     return ContextListResponse(
         contexts=[
@@ -71,6 +88,11 @@ async def list_contexts(pool: PoolDep):
                 persistent=c["persistent"],
                 in_use=c["in_use"],
                 created_at=c["created_at"],
+                tags=c["tags"],
+                last_used_at=c["last_used_at"],
+                total_requests=c["total_requests"],
+                error_count=c["error_count"],
+                consecutive_errors=c["consecutive_errors"],
             )
             for c in contexts
         ],
@@ -88,6 +110,30 @@ async def get_context(pool: PoolDep, context_id: str):
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Context not found: {context_id}",
         )
+
+    return ContextResponse(**context_response_from_instance(ctx))
+
+
+@router.patch("/{context_id}/tags", response_model=ContextResponse)
+async def update_tags(pool: PoolDep, context_id: str, body: ContextTagsUpdate):
+    """Update tags on a context.
+
+    Add and/or remove tags from a context. Useful for marking contexts
+    as "protected" or adding custom labels.
+    """
+    ctx = pool.get_context(context_id)
+    if ctx is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Context not found: {context_id}",
+        )
+
+    if body.add:
+        pool.add_tags(context_id, body.add)
+    if body.remove:
+        pool.remove_tags(context_id, body.remove)
+
+    logger.info("Updated tags for context %s: +%s -%s", context_id, body.add, body.remove)
 
     return ContextResponse(**context_response_from_instance(ctx))
 
