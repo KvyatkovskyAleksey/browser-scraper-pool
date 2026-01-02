@@ -43,10 +43,11 @@ async def scrape(pool: PoolDep, body: ScrapeRequest) -> ScrapeResponse:
     queue = get_request_queue()
     limiter = DomainRateLimiter(default_delay_ms=settings.default_domain_delay_ms)
 
-    # Build required tags
-    required_tags: set[str] = set(body.tags)
-    if body.proxy:
-        required_tags.add(f"proxy:{body.proxy}")
+    # Tags for SELECTION (user's tags only, no proxy filter)
+    selection_tags: set[str] = set(body.tags) if body.tags else set()
+
+    # Tags for CREATION (user's tags, proxy auto-added by create_context)
+    creation_tags: list[str] = list(body.tags) if body.tags else []
 
     # Extract domain from URL
     domain = limiter.extract_domain(str(body.url))
@@ -55,26 +56,27 @@ async def scrape(pool: PoolDep, body: ScrapeRequest) -> ScrapeResponse:
     queue_start = datetime.now(UTC)
     queue_wait_ms = 0
 
-    # Try to select a context
+    # Try to select a context by tags only (no proxy filter)
     ctx = pool.select_context(
-        tags=required_tags if required_tags else None,
+        tags=selection_tags if selection_tags else None,
         domain=domain,
         domain_delay_ms=body.domain_delay,
     )
 
-    # If no context available, try eviction or queue
+    # If no context available, create one (or evict and replace if pool full)
     if ctx is None:
-        # Check if we can evict and create a new context
-        if pool.size >= settings.max_contexts:
-            ctx = await pool.evict_and_replace(
-                tags=required_tags if required_tags else None,
-                proxy=body.proxy,
-            )
+        # evict_and_replace handles both cases:
+        # - pool not full: creates new context
+        # - pool full: evicts the worst candidate, creates new
+        ctx = await pool.evict_and_replace(
+            tags=creation_tags if creation_tags else None,
+            proxy=body.proxy,
+        )
 
         # If still no context, queue the request
         if ctx is None:
             queued = await queue.enqueue(
-                tags=required_tags if required_tags else None,
+                tags=selection_tags if selection_tags else None,
                 domain=domain,
                 domain_delay_ms=body.domain_delay,
             )
@@ -125,7 +127,9 @@ async def scrape(pool: PoolDep, body: ScrapeRequest) -> ScrapeResponse:
             asyncio.create_task(pool.recreate_context(ctx.id))  # noqa: RUF006
 
 
-async def _execute_scrape(ctx, body: ScrapeRequest, limiter: DomainRateLimiter, domain: str) -> ScrapeResponse:
+async def _execute_scrape(
+    ctx, body: ScrapeRequest, limiter: DomainRateLimiter, domain: str
+) -> ScrapeResponse:
     """Execute the scrape request on a context.
 
     Args:
@@ -162,9 +166,7 @@ async def _execute_scrape(ctx, body: ScrapeRequest, limiter: DomainRateLimiter, 
             try:
                 script_result = await ctx.page.evaluate(body.script)
             except Exception as e:
-                logger.warning(
-                    "Script execution failed for context %s: %s", ctx.id, e
-                )
+                logger.warning("Script execution failed for context %s: %s", ctx.id, e)
                 # Don't fail the whole request, just note the error
                 script_result = None
 

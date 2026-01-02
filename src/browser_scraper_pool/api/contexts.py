@@ -134,7 +134,9 @@ async def update_tags(pool: PoolDep, context_id: str, body: ContextTagsUpdate):
     if body.remove:
         pool.remove_tags(context_id, body.remove)
 
-    logger.info("Updated tags for context %s: +%s -%s", context_id, body.add, body.remove)
+    logger.info(
+        "Updated tags for context %s: +%s -%s", context_id, body.add, body.remove
+    )
 
     return ContextResponse(**context_response_from_instance(ctx))
 

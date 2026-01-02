@@ -14,12 +14,24 @@ from patchright.async_api import (
     Page,
     Playwright,
     async_playwright,
+    Request,
+    Route,
 )
 from pyvirtualdisplay import Display
 
 from browser_scraper_pool.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+BLOCKED_RESOURCE_TYPES = ["image", "media", "font", "stylesheet"]
+
+
+async def block_resources(route: Route, request: Request):
+    if request.resource_type in BLOCKED_RESOURCE_TYPES:
+        await route.abort()
+    else:
+        await route.continue_()
 
 
 class PoolNotStartedError(RuntimeError):
@@ -194,7 +206,13 @@ class ContextPool:
         try:
             self._browser = await self._playwright.chromium.launch(
                 headless=self.headless,
-                args=[f"--remote-debugging-port={self._cdp_port}"],
+                channel="chrome",
+                timeout=300 * 1000,
+                args=[
+                    f"--remote-debugging-port={self._cdp_port}",
+                    "--disable-features=OptimizationGuideModelDownloading,OptimizationHintsFetching,"
+                    "OptimizationTargetPrediction,OptimizationHints"
+                ],
             )
             self._started = True
         except Exception:
@@ -292,7 +310,9 @@ class ContextPool:
             cdp_session = await context.new_cdp_session(page)
             target_info = await cdp_session.send("Target.getTargetInfo")
             target_id = target_info["targetInfo"]["targetId"]
-            cdp_target_url = f"ws://127.0.0.1:{self._cdp_port}/devtools/page/{target_id}"
+            cdp_target_url = (
+                f"ws://127.0.0.1:{self._cdp_port}/devtools/page/{target_id}"
+            )
             await cdp_session.detach()
         except Exception:
             logger.debug("Failed to get CDP target URL", exc_info=True)
@@ -355,9 +375,7 @@ class ContextPool:
             try:
                 state_file = instance.storage_path / "state.json"
                 storage_state = await instance.context.storage_state()
-                state_file.write_text(
-                    __import__("json").dumps(storage_state, indent=2)
-                )
+                state_file.write_text(__import__("json").dumps(storage_state, indent=2))
             except Exception:
                 logger.debug(
                     "Error saving storage state for context %s",
@@ -394,9 +412,7 @@ class ContextPool:
             try:
                 state_file = instance.storage_path / "state.json"
                 storage_state = await instance.context.storage_state()
-                state_file.write_text(
-                    __import__("json").dumps(storage_state, indent=2)
-                )
+                state_file.write_text(__import__("json").dumps(storage_state, indent=2))
             except Exception:
                 logger.debug(
                     "Error saving storage state for context %s",
@@ -438,21 +454,25 @@ class ContextPool:
             if required_tags and not required_tags.issubset(instance.tags):
                 continue
 
-            results.append({
-                "id": instance.id,
-                "proxy": instance.proxy,
-                "persistent": instance.persistent,
-                "in_use": instance.in_use,
-                "created_at": instance.created_at.isoformat(),
-                "tags": list(instance.tags),
-                "last_used_at": (
-                    instance.last_used_at.isoformat() if instance.last_used_at else None
-                ),
-                "total_requests": instance.total_requests,
-                "error_count": instance.error_count,
-                "consecutive_errors": instance.consecutive_errors,
-                "cdp_url": instance.cdp_target_url,
-            })
+            results.append(
+                {
+                    "id": instance.id,
+                    "proxy": instance.proxy,
+                    "persistent": instance.persistent,
+                    "in_use": instance.in_use,
+                    "created_at": instance.created_at.isoformat(),
+                    "tags": list(instance.tags),
+                    "last_used_at": (
+                        instance.last_used_at.isoformat()
+                        if instance.last_used_at
+                        else None
+                    ),
+                    "total_requests": instance.total_requests,
+                    "error_count": instance.error_count,
+                    "consecutive_errors": instance.consecutive_errors,
+                    "cdp_url": instance.cdp_target_url,
+                }
+            )
 
         return results
 

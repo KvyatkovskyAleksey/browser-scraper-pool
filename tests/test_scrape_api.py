@@ -143,7 +143,7 @@ class TestScrapeEndpoint:
         assert "premium" in call_args.kwargs["tags"]
 
     async def test_scrape_with_proxy(self, client, mock_pool, mock_context):
-        """Should add proxy tag to selection."""
+        """Proxy should NOT be used for selection, only for creation."""
         response = await client.post(
             "/scrape",
             json={"url": "https://example.com", "proxy": "http://proxy:8080"},
@@ -152,7 +152,40 @@ class TestScrapeEndpoint:
         assert response.status_code == 200
         mock_pool.select_context.assert_called_once()
         call_args = mock_pool.select_context.call_args
-        assert "proxy:http://proxy:8080" in call_args.kwargs["tags"]
+        # Proxy is NOT added to selection tags - only user tags are used
+        assert call_args.kwargs["tags"] is None or "proxy:http://proxy:8080" not in call_args.kwargs["tags"]
+
+    async def test_scrape_creates_context_with_proxy(self, client, mock_pool):
+        """Should create context with proxy when no match found."""
+        mock_pool.select_context.return_value = None
+
+        new_ctx = MagicMock()
+        new_ctx.id = "ctx-new"
+        new_ctx.in_use = True
+        new_ctx.consecutive_errors = 0
+        new_ctx.domain_last_request = {}
+        mock_page = AsyncMock()
+        mock_page.url = "https://example.com"
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_page.goto = AsyncMock(return_value=mock_response)
+        mock_page.content = AsyncMock(return_value="<html></html>")
+        new_ctx.page = mock_page
+
+        mock_pool.evict_and_replace = AsyncMock(return_value=new_ctx)
+        mock_pool.acquire_context = AsyncMock(return_value=new_ctx)
+
+        response = await client.post(
+            "/scrape",
+            json={"url": "https://example.com", "proxy": "http://proxy:8080", "tags": ["spider1"]},
+        )
+
+        assert response.status_code == 200
+        # evict_and_replace should be called with the proxy
+        mock_pool.evict_and_replace.assert_called_once()
+        call_args = mock_pool.evict_and_replace.call_args
+        assert call_args.kwargs["proxy"] == "http://proxy:8080"
+        assert "spider1" in call_args.kwargs["tags"]
 
     async def test_scrape_navigation_error(self, client, mock_pool, mock_context):
         """Should return error response on navigation failure."""
