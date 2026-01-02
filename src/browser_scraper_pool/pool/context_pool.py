@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from types import TracebackType
 from typing import ClassVar
+from urllib.parse import unquote, urlparse
 
 import httpx
 
@@ -34,6 +35,34 @@ async def block_resources(route: Route, request: Request):
         await route.abort()
     else:
         await route.continue_()
+
+
+def parse_proxy_url(proxy_url: str) -> dict:
+    """Parse proxy URL into Playwright proxy config.
+
+    Playwright requires proxy credentials as separate fields, not embedded in URL.
+
+    Args:
+        proxy_url: URL like "http://user:pass@host:port" or "http://host:port"
+
+    Returns:
+        Dict with "server", and optionally "username"/"password"
+    """
+    parsed = urlparse(proxy_url)
+
+    # Rebuild server URL without credentials
+    server = f"{parsed.scheme}://{parsed.hostname}"
+    if parsed.port:
+        server += f":{parsed.port}"
+
+    result = {"server": server}
+
+    if parsed.username:
+        result["username"] = unquote(parsed.username)
+    if parsed.password:
+        result["password"] = unquote(parsed.password)
+
+    return result
 
 
 class PoolNotStartedError(RuntimeError):
@@ -293,7 +322,7 @@ class ContextPool:
 
         context_options: dict = {}
         if proxy:
-            context_options["proxy"] = {"server": proxy}
+            context_options["proxy"] = parse_proxy_url(proxy)
 
         if persistent:
             storage_path = self.persistent_contexts_dir / context_id

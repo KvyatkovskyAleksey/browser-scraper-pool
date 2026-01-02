@@ -11,6 +11,7 @@ from browser_scraper_pool.pool.context_pool import (
     ContextNotFoundError,
     ContextPool,
     PoolNotStartedError,
+    parse_proxy_url,
 )
 
 
@@ -82,6 +83,65 @@ def mock_display():
         mock_instance = MagicMock()
         mock.return_value = mock_instance
         yield mock
+
+
+# =============================================================================
+# Parse Proxy URL Tests
+# =============================================================================
+
+
+class TestParseProxyUrl:
+    """Tests for parse_proxy_url helper function."""
+
+    def test_parse_with_credentials(self):
+        """Should extract username and password from URL."""
+        result = parse_proxy_url("http://user:pass@proxy.com:8080")
+        assert result == {
+            "server": "http://proxy.com:8080",
+            "username": "user",
+            "password": "pass",
+        }
+
+    def test_parse_without_credentials(self):
+        """Should work with URL without credentials."""
+        result = parse_proxy_url("http://proxy.com:8080")
+        assert result == {"server": "http://proxy.com:8080"}
+
+    def test_parse_socks5(self):
+        """Should work with SOCKS5 proxy."""
+        result = parse_proxy_url("socks5://user:pass@proxy.com:1080")
+        assert result == {
+            "server": "socks5://proxy.com:1080",
+            "username": "user",
+            "password": "pass",
+        }
+
+    def test_parse_username_only(self):
+        """Should handle URL with username but no password."""
+        result = parse_proxy_url("http://user@proxy.com:8080")
+        assert result == {
+            "server": "http://proxy.com:8080",
+            "username": "user",
+        }
+
+    def test_parse_without_port(self):
+        """Should handle URL without explicit port."""
+        result = parse_proxy_url("http://user:pass@proxy.com")
+        assert result == {
+            "server": "http://proxy.com",
+            "username": "user",
+            "password": "pass",
+        }
+
+    def test_parse_special_chars_in_password(self):
+        """Should handle special characters in password (URL-encoded)."""
+        # URL with encoded special char: pass@word -> pass%40word
+        result = parse_proxy_url("http://user:pass%40word@proxy.com:8080")
+        assert result == {
+            "server": "http://proxy.com:8080",
+            "username": "user",
+            "password": "pass@word",
+        }
 
 
 # =============================================================================
