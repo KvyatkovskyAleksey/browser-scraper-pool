@@ -2,6 +2,7 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from browser_scraper_pool.pool.context_pool import (
@@ -22,7 +23,27 @@ def reset_singleton():
 
 
 @pytest.fixture
-def mock_playwright():
+def mock_httpx():
+    """Mock httpx.Client for CDP endpoint fetching."""
+    with patch("browser_scraper_pool.pool.context_pool.httpx") as mock:
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "webSocketDebuggerUrl": "ws://127.0.0.1:9222/devtools/browser/mock-guid"
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        # Mock httpx.Client() context manager pattern
+        mock_client = MagicMock()
+        mock_client.get.return_value = mock_response
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock.Client.return_value = mock_client
+
+        yield {"httpx": mock, "client": mock_client, "response": mock_response}
+
+
+@pytest.fixture
+def mock_playwright(mock_httpx):
     """Mock playwright and browser for unit tests."""
     with patch(
         "browser_scraper_pool.pool.context_pool.async_playwright"
@@ -50,6 +71,7 @@ def mock_playwright():
             "browser": mock_browser,
             "context": mock_context,
             "page": mock_page,
+            "httpx_mock": mock_httpx,
         }
 
 
@@ -606,21 +628,39 @@ class TestCDPEndpoint:
     """Tests for CDP endpoint."""
 
     async def test_get_cdp_endpoint(self, mock_playwright, mock_display):
-        """get_cdp_endpoint() should return WebSocket URL."""
+        """get_cdp_endpoint() should return browser's WebSocket URL from Chrome DevTools API."""
         pool = ContextPool(headless=True, use_virtual_display=False, cdp_port=9222)
         await pool.start()
 
         result = pool.get_cdp_endpoint()
 
-        assert result == "ws://127.0.0.1:9222"
+        # Returns the WebSocket URL from mock httpx response
+        assert result == "ws://127.0.0.1:9222/devtools/browser/mock-guid"
+        # Verify httpx.Client was created with trust_env=False
+        mock_playwright["httpx_mock"]["httpx"].Client.assert_called_with(trust_env=False)
+        # Verify client.get was called with correct URL
+        mock_playwright["httpx_mock"]["client"].get.assert_called_with(
+            "http://127.0.0.1:9222/json/version"
+        )
 
     async def test_cdp_port_custom(self, mock_playwright, mock_display):
-        """Custom CDP port should be used."""
+        """Custom CDP port should be used in httpx request."""
         pool = ContextPool(headless=True, use_virtual_display=False, cdp_port=9999)
         await pool.start()
 
         assert pool.cdp_port == 9999
-        assert pool.get_cdp_endpoint() == "ws://127.0.0.1:9999"
+        pool.get_cdp_endpoint()
+        # Verify client.get was called with custom port
+        mock_playwright["httpx_mock"]["client"].get.assert_called_with(
+            "http://127.0.0.1:9999/json/version"
+        )
+
+    async def test_get_cdp_endpoint_raises_when_not_started(self, mock_playwright, mock_display):
+        """get_cdp_endpoint() should raise PoolNotStartedError when not started."""
+        pool = ContextPool(headless=True, use_virtual_display=False)
+
+        with pytest.raises(PoolNotStartedError):
+            pool.get_cdp_endpoint()
 
 
 # =============================================================================

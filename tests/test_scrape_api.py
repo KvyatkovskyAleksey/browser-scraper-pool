@@ -57,7 +57,7 @@ def mock_pool(mock_context):
     pool.available_count = 1
     pool.cdp_port = 9222
     pool.is_started = True
-    pool.get_cdp_endpoint.return_value = "ws://127.0.0.1:9222"
+    pool.get_cdp_endpoint.return_value = "ws://127.0.0.1:9222/devtools/browser/mock-guid"
     pool.select_context.return_value = mock_context
     pool.acquire_context = AsyncMock(return_value=mock_context)
     pool.release_context = AsyncMock()

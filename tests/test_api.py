@@ -32,7 +32,7 @@ def mock_pool():
     pool.available_count = 0
     pool.cdp_port = 9222
     pool.is_started = True
-    pool.get_cdp_endpoint.return_value = "ws://127.0.0.1:9222"
+    pool.get_cdp_endpoint.return_value = "ws://127.0.0.1:9222/devtools/browser/mock-guid"
     pool.list_contexts.return_value = []
     pool.get_context.return_value = None
     return pool
@@ -98,7 +98,8 @@ class TestPoolEndpoints:
         assert data["available"] == 2
         assert data["in_use"] == 1
         assert data["cdp_port"] == 9222
-        assert data["cdp_endpoint"] == "ws://127.0.0.1:9222"
+        # CDP endpoint includes browser GUID for connect_over_cdp
+        assert data["cdp_endpoint"].startswith("ws://127.0.0.1:9222/devtools/browser/")
         assert data["is_started"] is True
 
     async def test_get_cdp(self, client, mock_pool):
@@ -107,7 +108,8 @@ class TestPoolEndpoints:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["endpoint"] == "ws://127.0.0.1:9222"
+        # CDP endpoint includes browser GUID for connect_over_cdp
+        assert data["endpoint"].startswith("ws://127.0.0.1:9222/devtools/browser/")
         assert data["port"] == 9222
 
 

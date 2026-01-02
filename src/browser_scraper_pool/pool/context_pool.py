@@ -8,6 +8,8 @@ from pathlib import Path
 from types import TracebackType
 from typing import ClassVar
 
+import httpx
+
 from patchright.async_api import (
     Browser,
     BrowserContext,
@@ -671,10 +673,20 @@ class ContextPool:
     def get_cdp_endpoint(self) -> str:
         """Get the CDP WebSocket endpoint URL.
 
+        Fetches the WebSocket debugger URL from Chrome's DevTools HTTP API.
+
         Returns:
-            WebSocket URL for CDP connection (e.g., ws://localhost:9222)
+            WebSocket URL for CDP connection (e.g., ws://127.0.0.1:9222/devtools/browser/{guid})
         """
-        return f"ws://127.0.0.1:{self._cdp_port}"
+        if not self._browser:
+            raise PoolNotStartedError()
+        # Fetch the WebSocket URL from Chrome's DevTools HTTP API
+        # This is necessary because Patchright's Browser object doesn't expose wsEndpoint
+        # Use trust_env=False to ignore system proxy environment variables for localhost
+        with httpx.Client(trust_env=False) as client:
+            response = client.get(f"http://127.0.0.1:{self._cdp_port}/json/version")
+        response.raise_for_status()
+        return response.json()["webSocketDebuggerUrl"]
 
     @property
     def size(self) -> int:
