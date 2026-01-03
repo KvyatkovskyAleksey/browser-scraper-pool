@@ -124,3 +124,42 @@ Environment variables:
 ```bash
 pytest
 ```
+
+## Docker
+
+### Build
+
+```bash
+docker build -t browser-scraper-pool .
+```
+
+### Run
+
+```bash
+docker run -d \
+  -p 8000:8000 \
+  -p 9222:9222 \
+  -v browser-pool-data:/app/data/contexts \
+  --name browser-pool \
+  browser-scraper-pool
+```
+
+### Docker Compose
+
+```yaml
+services:
+  browser-pool:
+    image: browser-scraper-pool
+    ports:
+      - "8000:8000"
+      - "9222:9222"
+    volumes:
+      - browser-pool-data:/app/data/contexts
+    environment:
+      - BROWSER_HEADLESS=false
+      - USE_VIRTUAL_DISPLAY=true
+      - MAX_CONTEXTS=10
+
+volumes:
+  browser-pool-data:
+```
