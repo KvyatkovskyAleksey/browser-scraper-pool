@@ -356,7 +356,7 @@ class ContextPool:
             target_info = await cdp_session.send("Target.getTargetInfo")
             target_id = target_info["targetInfo"]["targetId"]
             cdp_target_url = (
-                f"ws://127.0.0.1:{self._cdp_port}/devtools/page/{target_id}"
+                f"ws://{settings.cdp_public_host}:{settings.cdp_public_port}/devtools/page/{target_id}"
             )
             await cdp_session.detach()
         except Exception:
@@ -732,7 +732,13 @@ class ContextPool:
         with httpx.Client(trust_env=False) as client:
             response = client.get(f"http://127.0.0.1:{self._cdp_port}/json/version")
         response.raise_for_status()
-        return response.json()["webSocketDebuggerUrl"]
+        url = response.json()["webSocketDebuggerUrl"]
+        # Replace localhost with configured public host/port (for Docker/external access)
+        if settings.cdp_public_host != "127.0.0.1":
+            url = url.replace("127.0.0.1", settings.cdp_public_host)
+        if settings.cdp_public_port != self._cdp_port:
+            url = url.replace(f":{self._cdp_port}/", f":{settings.cdp_public_port}/")
+        return url
 
     @property
     def size(self) -> int:

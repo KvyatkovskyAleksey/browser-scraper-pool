@@ -14,7 +14,9 @@ class Settings(BaseSettings):
     browser_headless: bool = False
     use_virtual_display: bool = True
     virtual_display_size: tuple[int, int] = (1920, 1080)
-    cdp_port: int = 9222
+    cdp_port: int = 9222  # Chrome's internal CDP port
+    cdp_public_host: str = "127.0.0.1"  # Host in CDP URLs (for Docker: localhost)
+    cdp_public_port: int = 9222  # Port in CDP URLs (for Docker: 9223 via socat)
 
     # Persistent contexts storage
     persistent_contexts_path: str = "./data/contexts"

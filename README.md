@@ -111,7 +111,9 @@ Environment variables:
 | `BROWSER_HEADLESS` | `false` | Run browser in headless mode |
 | `USE_VIRTUAL_DISPLAY` | `true` | Use virtual display (X server) |
 | `VIRTUAL_DISPLAY_SIZE` | `1920,1080` | Virtual display resolution |
-| `CDP_PORT` | `9222` | Chrome DevTools Protocol port |
+| `CDP_PORT` | `9222` | Chrome DevTools Protocol port (internal) |
+| `CDP_PUBLIC_HOST` | `127.0.0.1` | Host in CDP URLs (for Docker: `localhost`) |
+| `CDP_PUBLIC_PORT` | `9222` | Port in CDP URLs (for Docker: `9223`) |
 | `PERSISTENT_CONTEXTS_PATH` | `./data/contexts` | Path for persistent context storage |
 | `MAX_CONTEXTS` | `10` | Maximum contexts in pool |
 | `DEFAULT_DOMAIN_DELAY_MS` | `1000` | Delay between requests to same domain |
@@ -138,11 +140,15 @@ docker build -t browser-scraper-pool .
 ```bash
 docker run -d \
   -p 8000:8000 \
-  -p 9222:9222 \
+  -p 9223:9223 \
+  -e CDP_PUBLIC_HOST=localhost \
+  -e CDP_PUBLIC_PORT=9223 \
   -v browser-pool-data:/app/data/contexts \
   --name browser-pool \
   browser-scraper-pool
 ```
+
+**Note:** Port 9223 is used for external CDP access (socat forwards to Chrome's internal port 9222).
 
 ### Docker Compose
 
@@ -152,13 +158,15 @@ services:
     image: browser-scraper-pool
     ports:
       - "8000:8000"
-      - "9222:9222"
+      - "9223:9223"
     volumes:
       - browser-pool-data:/app/data/contexts
     environment:
       - BROWSER_HEADLESS=false
       - USE_VIRTUAL_DISPLAY=true
       - MAX_CONTEXTS=10
+      - CDP_PUBLIC_HOST=localhost
+      - CDP_PUBLIC_PORT=9223
 
 volumes:
   browser-pool-data:
