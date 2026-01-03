@@ -214,6 +214,7 @@ class TestContextCRUD:
             {
                 "id": "ctx-1",
                 "proxy": None,
+                "proxy_config": None,
                 "persistent": False,
                 "in_use": True,
                 "created_at": "2025-01-15T10:00:00+00:00",
@@ -227,6 +228,7 @@ class TestContextCRUD:
             {
                 "id": "ctx-2",
                 "proxy": "http://proxy:8080",
+                "proxy_config": {"server": "http://proxy:8080"},
                 "persistent": True,
                 "in_use": False,
                 "created_at": "2025-01-15T11:00:00+00:00",
@@ -288,6 +290,7 @@ class TestContextCRUD:
             {
                 "id": "ctx-1",
                 "proxy": "http://proxy:8080",
+                "proxy_config": {"server": "http://proxy:8080"},
                 "persistent": False,
                 "in_use": False,
                 "created_at": "2025-01-15T10:00:00+00:00",

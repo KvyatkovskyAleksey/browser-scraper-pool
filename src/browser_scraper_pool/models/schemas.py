@@ -29,11 +29,23 @@ class ContextCreate(BaseModel):
     )
 
 
+class ProxyConfig(BaseModel):
+    """Parsed proxy configuration for Playwright."""
+
+    server: str = Field(description="Proxy server URL without credentials")
+    username: str | None = Field(default=None, description="Proxy username")
+    password: str | None = Field(default=None, description="Proxy password")
+
+
 class ContextResponse(BaseModel):
     """Response containing context information."""
 
     id: str = Field(description="Unique context identifier")
     proxy: str | None = Field(description="Proxy server URL if configured")
+    proxy_config: ProxyConfig | None = Field(
+        default=None,
+        description="Parsed proxy config with server, username, password separated",
+    )
     persistent: bool = Field(description="Whether context persists storage to disk")
     in_use: bool = Field(description="Whether context is currently acquired")
     created_at: datetime = Field(description="When the context was created")

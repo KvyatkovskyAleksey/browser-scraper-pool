@@ -85,6 +85,7 @@ async def list_contexts(
             ContextResponse(
                 id=c["id"],
                 proxy=c["proxy"],
+                proxy_config=c["proxy_config"],
                 persistent=c["persistent"],
                 in_use=c["in_use"],
                 created_at=c["created_at"],

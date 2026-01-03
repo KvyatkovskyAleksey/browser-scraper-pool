@@ -37,7 +37,7 @@ async def block_resources(route: Route, request: Request):
         await route.continue_()
 
 
-def parse_proxy_url(proxy_url: str) -> dict:
+def parse_proxy_url(proxy_url: str | None) -> dict | None:
     """Parse proxy URL into Playwright proxy config.
 
     Playwright requires proxy credentials as separate fields, not embedded in URL.
@@ -46,9 +46,16 @@ def parse_proxy_url(proxy_url: str) -> dict:
         proxy_url: URL like "http://user:pass@host:port" or "http://host:port"
 
     Returns:
-        Dict with "server", and optionally "username"/"password"
+        Dict with "server", and optionally "username"/"password", or None if invalid
     """
+    if not proxy_url:
+        return None
+
     parsed = urlparse(proxy_url)
+
+    # Validate we have a proper URL
+    if not parsed.scheme or not parsed.hostname:
+        return None
 
     # Rebuild server URL without credentials
     server = f"{parsed.scheme}://{parsed.hostname}"
@@ -242,7 +249,12 @@ class ContextPool:
                 args=[
                     f"--remote-debugging-port={self._cdp_port}",
                     "--disable-features=OptimizationGuideModelDownloading,OptimizationHintsFetching,"
-                    "OptimizationTargetPrediction,OptimizationHints"
+                    "OptimizationTargetPrediction,OptimizationHints",
+                    "--no-first-run",
+                    "--disable-blink-features=AutomationControlled",
+                    "--no-sandbox",
+                    "--disable-infobars",
+                    "--start-maximized",
                 ],
             )
             self._started = True
@@ -322,7 +334,9 @@ class ContextPool:
 
         context_options: dict = {}
         if proxy:
-            context_options["proxy"] = parse_proxy_url(proxy)
+            proxy_config = parse_proxy_url(proxy)
+            if proxy_config:
+                context_options["proxy"] = proxy_config
 
         if persistent:
             storage_path = self.persistent_contexts_dir / context_id
@@ -489,6 +503,9 @@ class ContextPool:
                 {
                     "id": instance.id,
                     "proxy": instance.proxy,
+                    "proxy_config": (
+                        parse_proxy_url(instance.proxy) if instance.proxy else None
+                    ),
                     "persistent": instance.persistent,
                     "in_use": instance.in_use,
                     "created_at": instance.created_at.isoformat(),

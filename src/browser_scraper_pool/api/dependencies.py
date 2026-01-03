@@ -4,7 +4,11 @@ from typing import Annotated
 
 from fastapi import Depends, Request
 
-from browser_scraper_pool.pool.context_pool import ContextInstance, ContextPool
+from browser_scraper_pool.pool.context_pool import (
+    ContextInstance,
+    ContextPool,
+    parse_proxy_url,
+)
 
 
 def get_pool(request: Request) -> ContextPool:
@@ -28,6 +32,7 @@ def context_response_from_instance(ctx: ContextInstance) -> dict:
     return {
         "id": ctx.id,
         "proxy": ctx.proxy,
+        "proxy_config": parse_proxy_url(ctx.proxy) if ctx.proxy else None,
         "persistent": ctx.persistent,
         "in_use": ctx.in_use,
         "created_at": ctx.created_at,
