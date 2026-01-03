@@ -129,45 +129,11 @@ pytest
 
 ## Docker
 
-### Build
+See [Docker Documentation](docs/docker.md) for full details.
+
+### Quick Start
 
 ```bash
-docker build -t browser-scraper-pool .
-```
-
-### Run
-
-```bash
-docker run -d \
-  -p 8000:8000 \
-  -p 9223:9223 \
-  -e CDP_PUBLIC_HOST=localhost \
-  -e CDP_PUBLIC_PORT=9223 \
-  -v browser-pool-data:/app/data/contexts \
-  --name browser-pool \
-  browser-scraper-pool
-```
-
-**Note:** Port 9223 is used for external CDP access (socat forwards to Chrome's internal port 9222).
-
-### Docker Compose
-
-```yaml
-services:
-  browser-pool:
-    image: browser-scraper-pool
-    ports:
-      - "8000:8000"
-      - "9223:9223"
-    volumes:
-      - browser-pool-data:/app/data/contexts
-    environment:
-      - BROWSER_HEADLESS=false
-      - USE_VIRTUAL_DISPLAY=true
-      - MAX_CONTEXTS=10
-      - CDP_PUBLIC_HOST=localhost
-      - CDP_PUBLIC_PORT=9223
-
-volumes:
-  browser-pool-data:
+# Pull and run
+docker run -d -p 8000:8000 -p 9223:9223 YOUR_USERNAME/browser-scraper-pool:latest
 ```
