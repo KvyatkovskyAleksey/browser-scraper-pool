@@ -57,7 +57,9 @@ def mock_pool(mock_context):
     pool.available_count = 1
     pool.cdp_port = 9222
     pool.is_started = True
-    pool.get_cdp_endpoint.return_value = "ws://127.0.0.1:9222/devtools/browser/mock-guid"
+    pool.get_cdp_endpoint.return_value = (
+        "ws://127.0.0.1:9222/devtools/browser/mock-guid"
+    )
     pool.select_context.return_value = mock_context
     pool.acquire_context = AsyncMock(return_value=mock_context)
     pool.release_context = AsyncMock()
@@ -153,7 +155,10 @@ class TestScrapeEndpoint:
         mock_pool.select_context.assert_called_once()
         call_args = mock_pool.select_context.call_args
         # Proxy is NOT added to selection tags - only user tags are used
-        assert call_args.kwargs["tags"] is None or "proxy:http://proxy:8080" not in call_args.kwargs["tags"]
+        assert (
+            call_args.kwargs["tags"] is None
+            or "proxy:http://proxy:8080" not in call_args.kwargs["tags"]
+        )
 
     async def test_scrape_creates_context_with_proxy(self, client, mock_pool):
         """Should create context with proxy when no match found."""
@@ -177,7 +182,11 @@ class TestScrapeEndpoint:
 
         response = await client.post(
             "/scrape",
-            json={"url": "https://example.com", "proxy": "http://proxy:8080", "tags": ["spider1"]},
+            json={
+                "url": "https://example.com",
+                "proxy": "http://proxy:8080",
+                "tags": ["spider1"],
+            },
         )
 
         assert response.status_code == 200

@@ -1,5 +1,6 @@
 """Context pool management with a singleton pattern and virtual display support."""
 
+import asyncio
 import logging
 import uuid
 from dataclasses import dataclass, field
@@ -10,15 +11,15 @@ from typing import ClassVar
 from urllib.parse import unquote, urlparse
 
 import httpx
-
+from patchright._impl._errors import TargetClosedError
 from patchright.async_api import (
     Browser,
     BrowserContext,
     Page,
     Playwright,
-    async_playwright,
     Request,
     Route,
+    async_playwright,
 )
 from pyvirtualdisplay import Display
 
@@ -183,6 +184,7 @@ class ContextPool:
         self._browser: Browser | None = None
         self._contexts: dict[str, ContextInstance] = {}
         self._started: bool = False
+        self._restart_lock: asyncio.Lock = asyncio.Lock()
 
     def __repr__(self) -> str:
         return (
@@ -310,6 +312,88 @@ class ContextPool:
                 )
             self._display = None
 
+    async def _is_browser_healthy(self) -> bool:
+        """Check if browser is responsive by attempting a real operation.
+
+        Returns:
+            True if browser is healthy, False otherwise.
+        """
+        if not self._browser:
+            return False
+
+        # is_connected() alone is not reliable - browser can be "connected" but dead
+        if not self._browser.is_connected():
+            return False
+
+        try:
+            # Actually try to do something with the browser
+            # Creating and closing a context is a lightweight way to verify
+            test_context = await asyncio.wait_for(
+                self._browser.new_context(),
+                timeout=10.0,
+            )
+            await test_context.close()
+        except Exception:
+            return False
+        else:
+            return True
+
+    async def _restart_browser(self) -> None:
+        """Restart browser after crash.
+
+        This method should only be called while holding _restart_lock.
+        """
+        logger.warning("Restarting browser due to crash...")
+
+        # Clean up old browser if exists
+        if self._browser:
+            try:
+                await self._browser.close()
+            except Exception:
+                logger.debug("Error closing crashed browser", exc_info=True)
+
+        if self._playwright:
+            try:
+                await self._playwright.stop()
+            except Exception:
+                logger.debug("Error stopping playwright during restart", exc_info=True)
+
+        # Clear all contexts (they're invalid now)
+        self._contexts.clear()
+
+        # Restart playwright and browser
+        self._playwright = await async_playwright().start()
+        self._browser = await self._playwright.chromium.launch(
+            headless=self.headless,
+            channel="chrome",
+            timeout=300 * 1000,
+            args=[
+                f"--remote-debugging-port={self._cdp_port}",
+                "--disable-features=OptimizationGuideModelDownloading,OptimizationHintsFetching,"
+                "OptimizationTargetPrediction,OptimizationHints",
+                "--no-first-run",
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+                "--disable-infobars",
+                "--start-maximized",
+            ],
+        )
+
+        logger.info("Browser restarted successfully")
+
+    async def _ensure_browser_healthy(self) -> None:
+        """Ensure browser is healthy, restart if needed.
+
+        Called when TargetClosedError indicates browser is dead.
+        Uses lock to ensure only one restart happens at a time.
+        """
+        async with self._restart_lock:
+            # Double-check after acquiring lock - another task may have restarted
+            if await self._is_browser_healthy():
+                return  # Browser was already restarted by another task
+
+            await self._restart_browser()
+
     async def create_context(
         self,
         proxy: str | None = None,
@@ -346,7 +430,15 @@ class ContextPool:
             if state_file.exists():
                 context_options["storage_state"] = str(state_file)
 
-        context = await self._browser.new_context(**context_options)
+        # Create context with retry on browser crash
+        try:
+            context = await self._browser.new_context(**context_options)
+        except TargetClosedError:
+            logger.warning("Browser crashed during context creation, restarting...")
+            await self._ensure_browser_healthy()
+            # Retry once after restart
+            context = await self._browser.new_context(**context_options)
+
         page = await context.new_page()
 
         # Get CDP target URL for this page
@@ -355,9 +447,7 @@ class ContextPool:
             cdp_session = await context.new_cdp_session(page)
             target_info = await cdp_session.send("Target.getTargetInfo")
             target_id = target_info["targetInfo"]["targetId"]
-            cdp_target_url = (
-                f"ws://{settings.cdp_public_host}:{settings.cdp_public_port}/devtools/page/{target_id}"
-            )
+            cdp_target_url = f"ws://{settings.cdp_public_host}:{settings.cdp_public_port}/devtools/page/{target_id}"
             await cdp_session.detach()
         except Exception:
             logger.debug("Failed to get CDP target URL", exc_info=True)

@@ -32,7 +32,9 @@ def mock_pool():
     pool.available_count = 0
     pool.cdp_port = 9222
     pool.is_started = True
-    pool.get_cdp_endpoint.return_value = "ws://127.0.0.1:9222/devtools/browser/mock-guid"
+    pool.get_cdp_endpoint.return_value = (
+        "ws://127.0.0.1:9222/devtools/browser/mock-guid"
+    )
     pool.list_contexts.return_value = []
     pool.get_context.return_value = None
     return pool
@@ -146,7 +148,9 @@ class TestContextCRUD:
         assert data["proxy"] is None
         assert data["persistent"] is False
         assert data["in_use"] is False
-        mock_pool.create_context.assert_called_once_with(proxy=None, persistent=False, tags=[])
+        mock_pool.create_context.assert_called_once_with(
+            proxy=None, persistent=False, tags=[]
+        )
 
     async def test_create_context_with_proxy(self, client, mock_pool):
         """Should create context with proxy."""
@@ -165,9 +169,7 @@ class TestContextCRUD:
 
         mock_pool.create_context = AsyncMock(return_value=mock_ctx)
 
-        response = await client.post(
-            "/contexts", json={"proxy": "http://proxy:8080"}
-        )
+        response = await client.post("/contexts", json={"proxy": "http://proxy:8080"})
 
         assert response.status_code == 201
         data = response.json()

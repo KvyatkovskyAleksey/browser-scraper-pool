@@ -222,7 +222,9 @@ class TestLifecycle:
 
         assert mock_playwright["browser"].close.call_count == 1
 
-    async def test_context_manager_starts_and_stops(self, mock_playwright, mock_display):
+    async def test_context_manager_starts_and_stops(
+        self, mock_playwright, mock_display
+    ):
         """async with should start and stop the pool."""
         pool = ContextPool(headless=True, use_virtual_display=False)
 
@@ -231,7 +233,9 @@ class TestLifecycle:
 
         assert pool.is_started is False
 
-    async def test_context_manager_stops_on_exception(self, mock_playwright, mock_display):
+    async def test_context_manager_stops_on_exception(
+        self, mock_playwright, mock_display
+    ):
         """Pool should stop even if exception is raised."""
         pool = ContextPool(headless=True, use_virtual_display=False)
 
@@ -257,7 +261,9 @@ class TestLifecycle:
 
         mock_display.return_value.stop.assert_called_once()
 
-    async def test_no_virtual_display_when_headless(self, mock_playwright, mock_display):
+    async def test_no_virtual_display_when_headless(
+        self, mock_playwright, mock_display
+    ):
         """Virtual display should not start when headless."""
         pool = ContextPool(headless=True, use_virtual_display=True)
         await pool.start()
@@ -297,7 +303,9 @@ class TestContextCreation:
             proxy={"server": "http://proxy:8080"}
         )
 
-    async def test_create_context_persistent(self, mock_playwright, mock_display, tmp_path):
+    async def test_create_context_persistent(
+        self, mock_playwright, mock_display, tmp_path
+    ):
         """create_context(persistent=True) should set storage path."""
         pool = ContextPool(
             headless=True,
@@ -458,7 +466,9 @@ class TestGetContext:
 
         assert result is ctx
 
-    async def test_get_context_unknown_returns_none(self, mock_playwright, mock_display):
+    async def test_get_context_unknown_returns_none(
+        self, mock_playwright, mock_display
+    ):
         """get_context() with unknown ID should return None."""
         pool = ContextPool(headless=True, use_virtual_display=False)
         await pool.start()
@@ -592,7 +602,9 @@ class TestTags:
 class TestContextSelection:
     """Tests for smart context selection."""
 
-    async def test_select_context_returns_available(self, mock_playwright, mock_display):
+    async def test_select_context_returns_available(
+        self, mock_playwright, mock_display
+    ):
         """select_context() should return available context."""
         pool = ContextPool(headless=True, use_virtual_display=False)
         await pool.start()
@@ -637,7 +649,9 @@ class TestContextSelection:
 
         assert result is None
 
-    async def test_select_context_prefers_healthier(self, mock_playwright, mock_display):
+    async def test_select_context_prefers_healthier(
+        self, mock_playwright, mock_display
+    ):
         """select_context() should prefer healthier contexts."""
         pool = ContextPool(headless=True, use_virtual_display=False)
         await pool.start()
@@ -666,7 +680,9 @@ class TestContextSelection:
         assert len(result) == 1
         assert result[0] is ctx2
 
-    async def test_get_available_contexts_with_tags(self, mock_playwright, mock_display):
+    async def test_get_available_contexts_with_tags(
+        self, mock_playwright, mock_display
+    ):
         """get_available_contexts() should filter by tags."""
         pool = ContextPool(headless=True, use_virtual_display=False)
         await pool.start()
@@ -697,7 +713,9 @@ class TestCDPEndpoint:
         # Returns the WebSocket URL from mock httpx response
         assert result == "ws://127.0.0.1:9222/devtools/browser/mock-guid"
         # Verify httpx.Client was created with trust_env=False
-        mock_playwright["httpx_mock"]["httpx"].Client.assert_called_with(trust_env=False)
+        mock_playwright["httpx_mock"]["httpx"].Client.assert_called_with(
+            trust_env=False
+        )
         # Verify client.get was called with correct URL
         mock_playwright["httpx_mock"]["client"].get.assert_called_with(
             "http://127.0.0.1:9222/json/version"
@@ -715,7 +733,9 @@ class TestCDPEndpoint:
             "http://127.0.0.1:9999/json/version"
         )
 
-    async def test_get_cdp_endpoint_raises_when_not_started(self, mock_playwright, mock_display):
+    async def test_get_cdp_endpoint_raises_when_not_started(
+        self, mock_playwright, mock_display
+    ):
         """get_cdp_endpoint() should raise PoolNotStartedError when not started."""
         pool = ContextPool(headless=True, use_virtual_display=False)
 
@@ -796,7 +816,9 @@ class TestCleanup:
         assert pool.size == 0
         assert mock_playwright["context"].close.call_count == 2
 
-    async def test_cleanup_handles_context_close_error(self, mock_playwright, mock_display):
+    async def test_cleanup_handles_context_close_error(
+        self, mock_playwright, mock_display
+    ):
         """Cleanup should continue even if context close fails."""
         mock_playwright["context"].close.side_effect = Exception("close error")
 

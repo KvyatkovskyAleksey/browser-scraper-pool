@@ -6,6 +6,7 @@ import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, status
+from patchright._impl._errors import TargetClosedError
 
 from browser_scraper_pool.api.dependencies import PoolDep
 from browser_scraper_pool.config import settings
@@ -68,10 +69,17 @@ async def scrape(pool: PoolDep, body: ScrapeRequest) -> ScrapeResponse:
         # evict_and_replace handles both cases:
         # - pool not full: creates new context
         # - pool full: evicts the worst candidate, creates new
-        ctx = await pool.evict_and_replace(
-            tags=creation_tags if creation_tags else None,
-            proxy=body.proxy,
-        )
+        try:
+            ctx = await pool.evict_and_replace(
+                tags=creation_tags if creation_tags else None,
+                proxy=body.proxy,
+            )
+        except TargetClosedError:
+            logger.warning("Browser crashed and could not be restarted")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Browser crashed and could not be restarted. Please try again.",
+            ) from None
 
         # If still no context, queue the request
         if ctx is None:

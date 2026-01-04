@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-01-04
+
+### Added
+- Automatic browser crash recovery with `TargetClosedError` detection
+- Browser restart mechanism with concurrent request handling via lock
+- Health check method that verifies browser responsiveness
+
+### Fixed
+- Browser crashes now trigger automatic restart instead of returning 500 errors
+- Concurrent requests during browser restart are handled gracefully (only one restart occurs)
+
 ## [0.1.0] - 2026-01-03
 
 ### Added

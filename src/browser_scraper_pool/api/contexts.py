@@ -6,6 +6,7 @@ import logging
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
+from patchright._impl._errors import TargetClosedError
 
 from browser_scraper_pool.api.dependencies import (
     PoolDep,
@@ -49,11 +50,18 @@ async def create_context(pool: PoolDep, body: ContextCreate):
     The context includes a clean default page ready for navigation.
     Proxy is automatically added as a tag (e.g., "proxy:http://...").
     """
-    ctx = await pool.create_context(
-        proxy=body.proxy,
-        persistent=body.persistent,
-        tags=body.tags,
-    )
+    try:
+        ctx = await pool.create_context(
+            proxy=body.proxy,
+            persistent=body.persistent,
+            tags=body.tags,
+        )
+    except TargetClosedError:
+        logger.warning("Browser crashed and could not be restarted")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Browser crashed and could not be restarted. Please try again.",
+        ) from None
 
     logger.info(
         "Created context %s (proxy=%s, persistent=%s, tags=%s)",
