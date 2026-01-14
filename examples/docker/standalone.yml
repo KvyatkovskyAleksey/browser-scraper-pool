@@ -1,0 +1,53 @@
+version: '3.8'
+
+# Standalone browser-scraper-pool deployment
+# Use this for development or simple deployments
+
+services:
+  browser-pool:
+    image: kvyatkovskyaleksey/browser-scraper-pool:latest
+    container_name: browser-pool
+    restart: unless-stopped
+
+    environment:
+      # Browser configuration
+      - BROWSER_HEADLESS=true
+      - USE_VIRTUAL_DISPLAY=true
+      - VIRTUAL_DISPLAY_SIZE=1920,1080
+
+      # Pool configuration
+      - MAX_CONTEXTS=10
+      - DEFAULT_DOMAIN_DELAY_MS=1000
+      - MAX_QUEUE_WAIT_SECONDS=300
+      - MAX_CONSECUTIVE_ERRORS=5
+
+      # CDP configuration (for external access)
+      - CDP_PUBLIC_HOST=browser-pool
+      - CDP_PUBLIC_PORT=9223
+
+      # Storage
+      - PERSISTENT_CONTEXTS_PATH=/app/data/contexts
+
+      # Logging
+      - LOG_LEVEL=INFO
+
+    volumes:
+      # Persist context data (cookies, localStorage)
+      - browser-pool-data:/app/data/contexts
+
+    ports:
+      # API port
+      - "8000:8000"
+      # CDP port (for external access)
+      - "9223:9223"
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/pool/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  browser-pool-data:
+    driver: local

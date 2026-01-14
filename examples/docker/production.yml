@@ -1,0 +1,84 @@
+version: '3.8'
+
+# Production deployment with multiple workers
+# Based on real-world usage from prizepicks project
+
+services:
+  browser-pool:
+    image: kvyatkovskyaleksey/browser-scraper-pool:latest
+    restart: always
+
+    environment:
+      # Production browser configuration
+      - BROWSER_HEADLESS=false  # Can be false with virtual display
+      - USE_VIRTUAL_DISPLAY=true
+      - VIRTUAL_DISPLAY_SIZE=1920,1080
+
+      # Pool sizing (adjust based on your needs)
+      - MAX_CONTEXTS=10
+      - DEFAULT_DOMAIN_DELAY_MS=1000
+      - MAX_QUEUE_WAIT_SECONDS=300
+      - MAX_CONSECUTIVE_ERRORS=5
+
+      # CDP for external access
+      - CDP_PUBLIC_HOST=browser-pool
+      - CDP_PUBLIC_PORT=9223
+
+      # Persistent storage
+      - PERSISTENT_CONTEXTS_PATH=/app/data/contexts
+
+      # Logging
+      - LOG_LEVEL=INFO  # Use DEBUG for troubleshooting
+
+    volumes:
+      # Persist context data across restarts
+      - browser-pool-data:/app/data/contexts
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/pool/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+    networks:
+      - internal
+
+  # Scraper worker (e.g., Celery worker)
+  scraper-worker:
+    build: .
+    restart: always
+    environment:
+      - BROWSER_POOL_URL=http://browser-pool:8000
+      - WORKER_CONCURRENCY=4
+    depends_on:
+      browser-pool:
+        condition: service_healthy
+    networks:
+      - internal
+
+    # Tip: To scale workers, use docker compose scale:
+    # docker compose -f production.yml up -d --scale scraper-worker=3
+
+  # Optional: Monitoring/Prometheus exporter
+  # monitoring:
+  #   image: prom/exporter
+  #   ports:
+  #     - "9090:9090"
+  #   networks:
+  #     - internal
+
+volumes:
+  browser-pool-data:
+    driver: local
+
+networks:
+  internal:
+    driver: bridge
+
+# Production Tips:
+# 1. Adjust MAX_CONTEXTS based on available RAM (each context ~5-10MB)
+# 2. Use environment-specific configs (staging vs production)
+# 3. Set up monitoring for pool status and health
+# 4. Use external secrets manager for proxy credentials
+# 5. Configure log aggregation (ELK, CloudWatch, etc.)

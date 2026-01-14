@@ -1,0 +1,64 @@
+version: '3.8'
+
+# Browser pool + client service
+# Use this when you have a separate service that needs to scrape
+
+services:
+  browser-pool:
+    image: kvyatkovskyaleksey/browser-scraper-pool:latest
+    container_name: browser-pool
+    restart: unless-stopped
+
+    environment:
+      - BROWSER_HEADLESS=true
+      - USE_VIRTUAL_DISPLAY=true
+      - MAX_CONTEXTS=10
+      - DEFAULT_DOMAIN_DELAY_MS=1000
+      - CDP_PUBLIC_HOST=browser-pool
+      - CDP_PUBLIC_PORT=9223
+      - LOG_LEVEL=INFO
+
+    volumes:
+      - browser-pool-data:/app/data/contexts
+
+    # Only expose to internal network (not to host)
+    # Client service will access via browser-pool:8000
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/pool/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    networks:
+      - scraper-network
+
+  # Your scraper service
+  # Replace with your actual service
+  scraper-service:
+    build: .
+    container_name: scraper-service
+    restart: unless-stopped
+
+    environment:
+      - BROWSER_POOL_URL=http://browser-pool:8000
+
+    depends_on:
+      browser-pool:
+        condition: service_healthy
+
+    networks:
+      - scraper-network
+
+    # Example: Add your specific configuration here
+    # volumes:
+    #   - ./data:/app/data
+
+volumes:
+  browser-pool-data:
+    driver: local
+
+networks:
+  scraper-network:
+    driver: bridge

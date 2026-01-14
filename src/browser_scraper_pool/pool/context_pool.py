@@ -234,12 +234,12 @@ class ContextPool:
             return
 
         # Start virtual display if configured and not headless
-        if self.use_virtual_display and not self.headless:
-            self._display = Display(
-                visible=False,
-                size=self.virtual_display_size,
-            )
-            self._display.start()
+        # if self.use_virtual_display and not self.headless:
+        #     self._display = Display(
+        #         visible=False,
+        #         size=self.virtual_display_size,
+        #     )
+        #     self._display.start()
 
         self._playwright = await async_playwright().start()
 

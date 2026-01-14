@@ -1,6 +1,21 @@
 # Browser Scraper Pool
 
-Web scraping context pool service with smart context management using Patchright + FastAPI.
+[![PyPI version](https://badge.fury.io/py/browser-scraper-pool.svg)](https://badge.fury.io/py/browser-scraper-pool)
+[![Python Version](https://img.shields.io/badge/python-3.13%2B-blue)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Tests](https://github.com/kvyatkovsky/browser-scraper-pool/actions/workflows/test.yml/badge.svg)](https://github.com/kvyatkovsky/browser-scraper-pool/actions/workflows/test.yml)
+[![Docker Pulls](https://img.shields.io/docker/pulls/kvyatkovskyaleksey/browser-scraper-pool)](https://hub.docker.com/r/kvyatkovskyaleksey/browser-scraper-pool)
+[![GitHub Stars](https://img.shields.io/github/stars/kvyatkovsky/browser-scraper-pool?style=social)](https://github.com/kvyatkovsky/browser-scraper-pool)
+
+🚀 **Production-ready web scraping service with smart context management, proxy rotation, and self-healing capabilities**
+
+**Tired of managing browser instances, proxy rotation, and rate limiting yourself?**
+Browser Scraper Pool handles all the complexity so you can focus on extracting data.
+
+✨ **Zero-config scraping** - Single endpoint, automatic context management
+🔄 **Smart proxy rotation** - Per-context proxy assignment with health tracking
+⚡ **Self-healing** - Auto-recreation on errors, browser crash recovery
+🐳 **Docker-ready** - One container, no browser setup headaches
 
 ## Features
 
@@ -26,16 +41,137 @@ uv sync
 patchright install chromium
 ```
 
-## Quick Start
+## 🎯 Quick Start
+
+Choose your use case:
+
+### I want to scrape a single URL (Simple)
 
 ```bash
-# Start the server
-uvicorn browser_scraper_pool.main:app --reload
+# One-line curl example
+curl -X POST http://localhost:8000/scrape \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://example.com", "get_content": true}'
 ```
 
-## Usage
+### I want to scrape with Python client (Common)
 
-### Create a Context
+```python
+import asyncio
+import httpx
+
+async def main():
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            "http://localhost:8000/scrape",
+            json={
+                "url": "https://example.com",
+                "get_content": True,
+                "wait_for": "networkidle"
+            }
+        )
+        result = response.json()
+        print(f"Status: {result['status']}")
+        print(f"Content: {result['content'][:100]}...")
+
+asyncio.run(main())
+```
+
+### I want to run in Docker (Production)
+
+```bash
+docker run -d \
+  -p 8000:8000 \
+  -p 9223:9223 \
+  -e BROWSER_HEADLESS=true \
+  -e USE_VIRTUAL_DISPLAY=true \
+  kvyatkovskyaleksey/browser-scraper-pool:latest
+```
+
+See [Docker Documentation](docs/docker.md) for full deployment guide.
+
+## 🏗️ Architecture
+
+```mermaid
+graph TD
+    A[Client Request] --> B[POST /scrape]
+    B --> C{Context Available?}
+    C -->|Yes| D[Select Context by Tags]
+    C -->|No| E[Request Queue]
+    E -->|Wait max 5 min| F[Timeout 503]
+    E -->|Context available| D
+    D --> G{Rate Limited?}
+    G -->|Yes| H[Wait or Pick Another]
+    G -->|No| I[Execute Request]
+    H --> I
+    I --> J[Return Result]
+    I --> K{Error?}
+    K -->|Consecutive errors > 5| L[Recreate Context]
+    K -->|TargetClosedError| M[Restart Browser]
+
+    style A fill:#e1f5fe
+    style B fill:#fff3e0
+    style D fill:#e8f5e9
+    style I fill:#f3e5f5
+    style J fill:#e1f5fe
+```
+
+**Key Design**: One browser instance + multiple isolated contexts
+- **3x less memory** than multiple browser instances
+- **Shared browser cache** for faster loading
+- **Isolated contexts** with separate cookies, proxies, and storage
+
+## ✨ Why Browser Scraper Pool?
+
+### 🎯 Smart Context Management
+- **Tag-based selection** - Route requests to contexts with specific tags (e.g., "premium", "residential-proxy")
+- **Automatic eviction** - Intelligently removes idle contexts when pool is full
+- **Protected contexts** - Tag important contexts as "protected" to prevent eviction
+
+### 🛡️ Production-Ready Features
+- **Per-domain rate limiting** - Avoid blocks with intelligent delays (configurable per domain)
+- **Auto-recovery** - Context recreation after 5 consecutive errors
+- **Browser crash recovery** - Automatic restart on TargetClosedError
+- **Request queue** - Wait up to 5 minutes for available context
+
+### 🔧 Advanced Capabilities
+- **CDP access** - Chrome DevTools Protocol for custom network interception
+- **Proxy authentication** - Handle 407 errors via CDP
+- **Persistent contexts** - Save/load cookies and localStorage
+- **Resource blocking** - Faster scraping by blocking images/fonts/stylesheets
+
+### 🐳 Docker-Native
+- Single container with socat for CDP forwarding
+- Persistent volume for context storage
+- Environment-based configuration
+- Health checks and auto-restart policies
+
+## 📊 How It Compares
+
+| Feature | browser-scraper-pool | puppeteer-cluster | scrapyd |
+|---------|---------------------|-------------------|---------|
+| Context-per-browser | ✅ Efficient | ❌ One browser per worker | ❌ Not browser-based |
+| Per-domain rate limiting | ✅ Built-in | ❌ Manual | ❌ Manual |
+| Auto-recovery on errors | ✅ Yes | ❌ Manual | ❌ Manual |
+| Proxy authentication | ✅ Via CDP | ❌ Complex | ❌ Manual |
+| Docker support | ✅ First-class | ⚠️ Requires setup | ⚠️ Requires setup |
+| Python async | ✅ FastAPI | ❌ Node.js only | ⚠️ Sync-only |
+
+## 🏢 Production Use Case
+
+See how real companies use browser-scraper-pool in production:
+
+**PrizePicks** - Sports data scraping at scale
+- ✅ 10 concurrent contexts with 1 browser instance
+- ✅ Proxy rotation across 3 providers (residential, datacenter, premium)
+- ✅ Session persistence for logged-in scraping
+- ✅ Zero-downtime browser crash recovery
+- ✅ Celery integration for background tasks
+- ✅ Multi-worker deployment with Docker Compose
+
+View their setup in [examples/docker/production.yml](examples/docker/production.yml)
+
+## Usage
 
 ```bash
 curl -X POST http://localhost:8000/contexts \

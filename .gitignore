@@ -162,4 +162,7 @@ cython_debug/
 
 # Zed
 .zed
+
+# persistant contexts storage
 /data/contexts
+/src/browser_scraper_pool/data/contexts/
