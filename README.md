@@ -3,9 +3,9 @@
 [![PyPI version](https://badge.fury.io/py/browser-scraper-pool.svg)](https://badge.fury.io/py/browser-scraper-pool)
 [![Python Version](https://img.shields.io/badge/python-3.13%2B-blue)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests](https://github.com/kvyatkovsky/browser-scraper-pool/actions/workflows/test.yml/badge.svg)](https://github.com/kvyatkovsky/browser-scraper-pool/actions/workflows/test.yml)
+[![Tests](https://github.com/KvyatkovskyAleksey/browser-scraper-pool/actions/workflows/test.yml/badge.svg)](https://github.com/KvyatkovskyAleksey/browser-scraper-pool/actions/workflows/test.yml)
 [![Docker Pulls](https://img.shields.io/docker/pulls/kvyatkovskyaleksey/browser-scraper-pool)](https://hub.docker.com/r/kvyatkovskyaleksey/browser-scraper-pool)
-[![GitHub Stars](https://img.shields.io/github/stars/kvyatkovsky/browser-scraper-pool?style=social)](https://github.com/kvyatkovsky/browser-scraper-pool)
+[![GitHub Stars](https://img.shields.io/github/stars/KvyatkovskyAleksey/browser-scraper-pool?style=social)](https://github.com/KvyatkovskyAleksey/browser-scraper-pool)
 
 🚀 **Production-ready web scraping service with smart context management, proxy rotation, and self-healing capabilities**
 
