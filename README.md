@@ -157,20 +157,6 @@ graph TD
 | Docker support | ✅ First-class | ⚠️ Requires setup | ⚠️ Requires setup |
 | Python async | ✅ FastAPI | ❌ Node.js only | ⚠️ Sync-only |
 
-## 🏢 Production Use Case
-
-See how real companies use browser-scraper-pool in production:
-
-**PrizePicks** - Sports data scraping at scale
-- ✅ 10 concurrent contexts with 1 browser instance
-- ✅ Proxy rotation across 3 providers (residential, datacenter, premium)
-- ✅ Session persistence for logged-in scraping
-- ✅ Zero-downtime browser crash recovery
-- ✅ Celery integration for background tasks
-- ✅ Multi-worker deployment with Docker Compose
-
-View their setup in [examples/docker/production.yml](examples/docker/production.yml)
-
 ## Usage
 
 ```bash
