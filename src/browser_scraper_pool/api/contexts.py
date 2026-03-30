@@ -151,11 +151,30 @@ async def update_tags(pool: PoolDep, context_id: str, body: ContextTagsUpdate):
 
 
 @router.delete("/{context_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_context(pool: PoolDep, context_id: str):
+async def delete_context(
+    pool: PoolDep,
+    context_id: str,
+    force: Annotated[
+        bool,
+        Query(description="Force-remove even if in_use, with timeout on tab close"),
+    ] = False,
+):
     """Remove and close a context.
 
-    The context must not be in use (acquired) when deleting.
+    By default the context must not be in use (acquired) when deleting.
+    Pass ?force=true to remove regardless of in_use state — the Chrome tab
+    close is attempted with a timeout so wedged tabs don't block the call.
     """
+    if force:
+        removed = await pool.force_remove_context(context_id)
+        if not removed:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Context not found: {context_id}",
+            )
+        logger.info("Force-removed context %s", context_id)
+        return
+
     try:
         removed = await pool.remove_context(context_id)
         if not removed:

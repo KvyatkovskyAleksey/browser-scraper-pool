@@ -558,6 +558,47 @@ class ContextPool:
         await instance.context.close()
         return True
 
+    async def force_remove_context(self, context_id: str, close_timeout: float = 5.0) -> bool:
+        """Force-remove a context, even if in_use, with a timeout on close.
+
+        Removes the context from tracking immediately, then attempts to close
+        the Chrome tab with a timeout.  If the tab is wedged and close hangs,
+        the context is still removed from the pool (the orphaned tab will be
+        cleaned up on browser restart).
+
+        Args:
+            context_id: The ID of the context to remove
+            close_timeout: Max seconds to wait for Chrome tab close
+
+        Returns:
+            True if removed, False if not found
+        """
+        if context_id not in self._contexts:
+            return False
+
+        instance = self._contexts.pop(context_id)
+        logger.warning(
+            "Force-removing context %s (in_use=%s, tags=%s)",
+            context_id, instance.in_use, instance.tags,
+        )
+
+        # Try to close gracefully with a timeout — if it hangs, abandon it
+        try:
+            await asyncio.wait_for(instance.context.close(), timeout=close_timeout)
+        except TimeoutError:
+            logger.warning(
+                "Chrome tab close timed out for context %s after %.0fs — "
+                "tab orphaned (will be cleaned on browser restart)",
+                context_id, close_timeout,
+            )
+        except Exception:
+            logger.debug(
+                "Error closing context %s during force-remove",
+                context_id, exc_info=True,
+            )
+
+        return True
+
     def get_context(self, context_id: str) -> ContextInstance | None:
         """Get a context by ID without acquiring it.
 
